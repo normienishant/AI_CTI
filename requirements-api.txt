@@ -1,0 +1,11 @@
+# Lightweight requirements for API server only
+# This excludes heavy ML dependencies (torch, transformers, etc.) which are only needed for clustering scripts
+fastapi
+uvicorn
+supabase
+requests
+feedparser
+beautifulsoup4
+lxml
+apscheduler
+

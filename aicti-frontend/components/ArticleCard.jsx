@@ -6,10 +6,18 @@ const FALLBACK_IMAGE =
 function formatHostname(source) {
   if (!source) return 'Unknown';
   try {
-    const url = source.startsWith('http') ? new URL(source) : new URL(`https://${source}`);
-    return url.hostname.replace(/^www\./, '');
+    // Decode URL encoding (e.g., %20 -> space, %2F -> /)
+    let decoded = decodeURIComponent(source);
+    // If it's a URL, extract hostname
+    if (decoded.startsWith('http')) {
+      const url = new URL(decoded);
+      return url.hostname.replace(/^www\./, '');
+    }
+    // If it's already a hostname, clean it
+    return decoded.replace(/^www\./, '').replace(/%20/g, ' ').replace(/%2F/g, '/');
   } catch {
-    return source;
+    // If decoding fails, try basic cleaning
+    return source.replace(/%20/g, ' ').replace(/%2F/g, '/').replace(/^www\./, '');
   }
 }
 

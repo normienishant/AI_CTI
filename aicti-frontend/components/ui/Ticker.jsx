@@ -12,10 +12,21 @@ export default function Ticker({ pollInterval = 30000 }) {
       // Create simple headlines array from feeds or iocs
       let headlines = [];
       if (json.feeds && json.feeds.length) {
-        headlines = json.feeds.map(f => ({
-          title: f.title || f.link || 'Untitled',
-          source: (f.source || (f.link && (new URL(f.link)).hostname) || 'unknown')
-        }));
+        headlines = json.feeds.map(f => {
+          let source = f.source || (f.link && (() => {
+            try { return new URL(f.link).hostname; } catch { return 'unknown'; }
+          })()) || 'unknown';
+          // Decode URL encoding in source names
+          try {
+            source = decodeURIComponent(source).replace(/^www\./, '');
+          } catch {
+            source = source.replace(/%20/g, ' ').replace(/%2F/g, '/');
+          }
+          return {
+            title: f.title || f.link || 'Untitled',
+            source: source
+          };
+        });
       } else if (json.iocs && json.iocs.length) {
         headlines = json.iocs.slice(0, 30).map(i => ({
           title: i.title || i.file || 'Untitled',
