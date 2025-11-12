@@ -14,6 +14,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.get("/")
+def root():
+    """Root endpoint for health check"""
+    return {
+        "status": "ok",
+        "service": "AI-CTI API",
+        "docs": "/docs",
+        "endpoints": {
+            "results": "/results",
+            "fetch_live": "/fetch_live (POST)",
+            "docs": "/docs"
+        }
+    }
+
 BASE = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 INGEST = os.path.join(BASE, "data_ingest", "ingest.py")
 PREPROC = os.path.join(BASE, "data_ingest", "preprocess.py")
@@ -33,10 +48,22 @@ try:
         from supabase import create_client as create_supabase_client
 
         supabase_client = create_supabase_client(SUPABASE_URL, SUPABASE_KEY)
-        SUPABASE_ENABLED = True
+        # Test connection
+        try:
+            supabase_client.table("articles").select("id").limit(1).execute()
+            SUPABASE_ENABLED = True
+            print("[supabase] Client initialized successfully")
+        except Exception as test_err:
+            print(f"[supabase] Connection test failed: {test_err}")
+            SUPABASE_ENABLED = False
+            supabase_client = None
+    else:
+        print("[supabase] Missing SUPABASE_URL or SUPABASE_KEY, disabling Supabase")
+        SUPABASE_ENABLED = False
 except Exception as supa_exc:
-    print(f"[supabase] client disabled: {supa_exc}")
+    print(f"[supabase] Client initialization failed: {supa_exc}")
     SUPABASE_ENABLED = False
+    supabase_client = None
 
 
 def run_cmd(cmd):
