@@ -1,0 +1,4 @@
+{
+  "text": "Hidden Logic Bombs in Malware-Laced NuGet Packages Set to Detonate Years After Installation A set of nine malicious NuGet packages has been identified as capable of dropping time-delayed payloads to sabotage database operations and corrupt industrial control systems. According to software supply chain security company Socket, the packages were published in 2023 and 2024 by a user named \"shanhai666\" and are designed to run malicious code after specific trigger dates in August 2027 and",
+  "link": "https://thehackernews.com/2025/11/hidden-logic-bombs-in-malware-laced.html"
+}

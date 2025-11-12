@@ -1,0 +1,27 @@
+name: Fetch Live Feeds
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger backend /fetch_live
+        env:
+          BACKEND_URL: ${{ secrets.BACKEND_URL }}
+          BACKEND_TRIGGER_TOKEN: ${{ secrets.BACKEND_TRIGGER_TOKEN }}
+        run: |
+          if [ -z "$BACKEND_URL" ]; then
+            echo "Missing BACKEND_URL secret (e.g. https://api.ai-cti.app)"; exit 1;
+          fi
+          TARGET="${BACKEND_URL%/}/fetch_live"
+          echo "Triggering $TARGET"
+          if [ -n "$BACKEND_TRIGGER_TOKEN" ]; then
+            curl -sf -X POST "$TARGET" -H "Authorization: Bearer $BACKEND_TRIGGER_TOKEN"
+          else
+            curl -sf -X POST "$TARGET"
+          fi
+

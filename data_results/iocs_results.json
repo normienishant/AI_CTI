@@ -1,0 +1,286 @@
+[
+  {
+    "file": "live_feed_20251108_152800_0.json",
+    "iocs": {
+      "ips": [],
+      "domains": [
+        "threatpost.com"
+      ],
+      "cves": []
+    }
+  },
+  {
+    "file": "live_feed_20251108_152800_1.json",
+    "iocs": {
+      "ips": [],
+      "domains": [
+        "threatpost.com"
+      ],
+      "cves": []
+    }
+  },
+  {
+    "file": "live_feed_20251108_152800_10.json",
+    "iocs": {
+      "ips": [],
+      "domains": [
+        "samsung-zero-click-flaw-exploited-to.html",
+        "thehackernews.com",
+        "libimagecodec.quram.so"
+      ],
+      "cves": [
+        "CVE-2025-21042"
+      ]
+    }
+  },
+  {
+    "file": "live_feed_20251108_152800_11.json",
+    "iocs": {
+      "ips": [],
+      "domains": [
+        "thehackernews.com",
+        "from-log4j-to-iis-chinas-hackers-turn.html"
+      ],
+      "cves": []
+    }
+  },
+  {
+    "file": "live_feed_20251108_152800_12.json",
+    "iocs": {
+      "ips": [],
+      "domains": [
+        "thehackernews.com",
+        "hidden-logic-bombs-in-malware-laced.html"
+      ],
+      "cves": []
+    }
+  },
+  {
+    "file": "live_feed_20251108_152800_13.json",
+    "iocs": {
+      "ips": [],
+      "domains": [
+        "enterprise-credentials-at-risk-same-old.html",
+        "thehackernews.com"
+      ],
+      "cves": []
+    }
+  },
+  {
+    "file": "live_feed_20251108_152800_14.json",
+    "iocs": {
+      "ips": [],
+      "domains": [
+        "thehackernews.com",
+        "google-launches-new-maps-feature-to.html"
+      ],
+      "cves": []
+    }
+  },
+  {
+    "file": "live_feed_20251108_152800_2.json",
+    "iocs": {
+      "ips": [],
+      "domains": [
+        "threatpost.com"
+      ],
+      "cves": []
+    }
+  },
+  {
+    "file": "live_feed_20251108_152800_3.json",
+    "iocs": {
+      "ips": [],
+      "domains": [
+        "threatpost.com"
+      ],
+      "cves": []
+    }
+  },
+  {
+    "file": "live_feed_20251108_152800_4.json",
+    "iocs": {
+      "ips": [],
+      "domains": [
+        "threatpost.com"
+      ],
+      "cves": []
+    }
+  },
+  {
+    "file": "live_feed_20251108_152800_5.json",
+    "iocs": {
+      "ips": [],
+      "domains": [
+        "www.bleepingcomputer.com"
+      ],
+      "cves": []
+    }
+  },
+  {
+    "file": "live_feed_20251108_152800_6.json",
+    "iocs": {
+      "ips": [],
+      "domains": [
+        "www.bleepingcomputer.com"
+      ],
+      "cves": []
+    }
+  },
+  {
+    "file": "live_feed_20251108_152800_7.json",
+    "iocs": {
+      "ips": [],
+      "domains": [
+        "www.bleepingcomputer.com"
+      ],
+      "cves": []
+    }
+  },
+  {
+    "file": "live_feed_20251108_152800_8.json",
+    "iocs": {
+      "ips": [],
+      "domains": [
+        "www.bleepingcomputer.com"
+      ],
+      "cves": []
+    }
+  },
+  {
+    "file": "live_feed_20251108_152800_9.json",
+    "iocs": {
+      "ips": [],
+      "domains": [
+        "www.bleepingcomputer.com"
+      ],
+      "cves": []
+    }
+  },
+  {
+    "file": "sample_0.json",
+    "iocs": {
+      "ips": [
+        "1.2.3.4"
+      ],
+      "domains": [
+        "bad.example.com"
+      ],
+      "cves": []
+    }
+  },
+  {
+    "file": "sample_1.json",
+    "iocs": {
+      "ips": [
+        "5.6.7.8"
+      ],
+      "domains": [
+        "evil.example.org"
+      ],
+      "cves": [
+        "CVE-2024-9999"
+      ]
+    }
+  },
+  {
+    "file": "threatpost_0.json",
+    "iocs": {
+      "ips": [],
+      "domains": [
+        "threatpost.com"
+      ],
+      "cves": []
+    }
+  },
+  {
+    "file": "threatpost_1.json",
+    "iocs": {
+      "ips": [],
+      "domains": [
+        "threatpost.com"
+      ],
+      "cves": []
+    }
+  },
+  {
+    "file": "threatpost_2.json",
+    "iocs": {
+      "ips": [],
+      "domains": [
+        "threatpost.com"
+      ],
+      "cves": []
+    }
+  },
+  {
+    "file": "threatpost_3.json",
+    "iocs": {
+      "ips": [],
+      "domains": [
+        "threatpost.com"
+      ],
+      "cves": []
+    }
+  },
+  {
+    "file": "threatpost_4.json",
+    "iocs": {
+      "ips": [],
+      "domains": [
+        "threatpost.com"
+      ],
+      "cves": []
+    }
+  },
+  {
+    "file": "threatpost_5.json",
+    "iocs": {
+      "ips": [],
+      "domains": [
+        "threatpost.com"
+      ],
+      "cves": []
+    }
+  },
+  {
+    "file": "threatpost_6.json",
+    "iocs": {
+      "ips": [],
+      "domains": [
+        "threatpost.com"
+      ],
+      "cves": []
+    }
+  },
+  {
+    "file": "threatpost_7.json",
+    "iocs": {
+      "ips": [],
+      "domains": [
+        "threatpost.com"
+      ],
+      "cves": []
+    }
+  },
+  {
+    "file": "threatpost_8.json",
+    "iocs": {
+      "ips": [],
+      "domains": [
+        "threatpost.com"
+      ],
+      "cves": []
+    }
+  },
+  {
+    "file": "threatpost_9.json",
+    "iocs": {
+      "ips": [],
+      "domains": [
+        "threatpost.com"
+      ],
+      "cves": []
+    }
+  }
+]

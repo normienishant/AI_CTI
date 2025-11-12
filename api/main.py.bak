@@ -1,0 +1,89 @@
+﻿# api/main.py
+from fastapi import FastAPI, BackgroundTasks
+from fastapi.middleware.cors import CORSMiddleware
+import subprocess, sys, os, json, pathlib
+
+app = FastAPI(title="AI-CTI API")
+
+# allow local UI calls
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+BASE = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+INGEST = os.path.join(BASE, "data_ingest", "ingest.py")
+PREPROC = os.path.join(BASE, "data_ingest", "preprocess.py")
+IOC = os.path.join(BASE, "utils", "ioc_extractor.py")
+CLUST = os.path.join(BASE, "models", "clustering.py")
+RESULTS_DIR = pathlib.Path(BASE).parent / "data_results"
+
+def run_cmd(cmd):
+    # run a python script via same interpreter
+    print("[api] running", cmd)
+    proc = subprocess.run([sys.executable, cmd], capture_output=True, text=True)
+    return {"returncode": proc.returncode, "stdout": proc.stdout, "stderr": proc.stderr}
+
+@app.post("/ingest")
+def ingest(background_tasks: BackgroundTasks):
+    background_tasks.add_task(run_cmd, INGEST)
+    return {"status":"ingest started"}
+
+@app.post("/preprocess")
+def preprocess(background_tasks: BackgroundTasks):
+    background_tasks.add_task(run_cmd, PREPROC)
+    return {"status":"preprocess started"}
+
+@app.post("/extract_iocs")
+def extract_iocs(background_tasks: BackgroundTasks):
+    background_tasks.add_task(run_cmd, IOC)
+    return {"status":"ioc extraction started"}
+
+@app.post("/analyze")
+def analyze(background_tasks: BackgroundTasks):
+    background_tasks.add_task(run_cmd, CLUST)
+    return {"status":"analysis started"}
+
+@app.get("/results")
+def results():
+    out = {}
+    out_path = RESULTS_DIR
+    if (out_path / "iocs_results.json").exists():
+        out["iocs"] = json.loads((out_path / "iocs_results.json").read_text(encoding="utf-8"))
+    else:
+        out["iocs"] = []
+    if (out_path / "clusters.json").exists():
+        out["clusters"] = json.loads((out_path / "clusters.json").read_text(encoding="utf-8"))
+    else:
+        out["clusters"] = {}
+    return out
+# --- live feed endpoint (added) ---
+LIVE = os.path.join(BASE, "data_ingest", "live_ingest.py")
+
+@app.post("/fetch_live")
+def fetch_live(background_tasks: BackgroundTasks):
+    background_tasks.add_task(run_cmd, LIVE)
+    return {"status": "live feed ingestion started"}
+# --- end added block ---
+# --- run_all endpoint (added) ---
+@app.post("/run_all")
+def run_all():
+    """Run the full pipeline synchronously: fetch_live -> preprocess -> extract_iocs -> analyze"""
+    commands = [INGEST, PREPROC, IOC, CLUST]
+    results = []
+    for cmd in commands:
+        print("[run_all] running", cmd)
+        proc = subprocess.run([sys.executable, cmd], capture_output=True, text=True)
+        results.append({
+            "cmd": cmd,
+            "returncode": proc.returncode,
+            "stdout": proc.stdout,
+            "stderr": proc.stderr
+        })
+        # if one step failed, stop and return partial results
+        if proc.returncode != 0:
+            return {"status": "error", "stage": cmd, "results": results}
+    return {"status": "ok", "results": results}
+# --- end run_all block ---

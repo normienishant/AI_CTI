@@ -1,0 +1,280 @@
+﻿# data_ingest/live_ingest_supabase.py
+"""
+Fetch live threat intelligence feeds, enrich with OG images, and persist to Supabase.
+
+Responsibilities:
+- Pull multiple cybersecurity RSS feeds.
+- Extract clean metadata (title, summary, link, published_at, source_name).
+- Resolve OG/Twitter preview images, upload to Supabase Storage, capture public URL.
+- Persist article metadata into Supabase `articles` table via UPSERT on unique link.
+- Extract lightweight IOCs (IP/domain/CVE) and upsert into Supabase `iocs` table.
+- Upload the raw JSON batch to Supabase storage for traceability (no local disk writes).
+"""
+
+from __future__ import annotations
+
+import hashlib
+import io
+import json
+import mimetypes
+import os
+import re
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
+from typing import Dict, Iterable, List, Optional
+from urllib.parse import urlparse
+
+import feedparser
+import requests
+from bs4 import BeautifulSoup
+
+try:
+    from supabase import create_client
+except Exception as exc:  # pragma: no cover - handled at runtime
+    raise SystemExit(
+        "supabase package not found. Install dependencies first: pip install supabase"
+    ) from exc
+
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+SUPABASE_BUCKET = os.getenv("SUPABASE_BUCKET", "raw-feeds")
+SUPABASE_IMAGE_BUCKET = os.getenv("SUPABASE_IMAGE_BUCKET", SUPABASE_BUCKET)
+
+if not SUPABASE_URL or not SUPABASE_KEY:
+    raise SystemExit(
+        "Missing Supabase credentials. Ensure SUPABASE_URL and SUPABASE_KEY are set."
+    )
+
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+storage = supabase.storage.from_(SUPABASE_BUCKET)
+image_storage = supabase.storage.from_(SUPABASE_IMAGE_BUCKET)
+
+DEFAULT_IMAGE_URL = os.getenv(
+    "DEFAULT_ARTICLE_IMAGE",
+    "https://placehold.co/600x360/0f172a/ffffff?text=AI-CTI",
+)
+
+HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0 Safari/537.36"
+    )
+}
+
+FEEDS: Dict[str, Dict[str, str]] = {
+    "https://threatpost.com/feed/": {"name": "ThreatPost"},
+    "https://www.bleepingcomputer.com/feed/": {"name": "BleepingComputer"},
+    "https://feeds.feedburner.com/TheHackersNews": {"name": "The Hacker News"},
+    "https://www.darkreading.com/rss.xml": {"name": "Dark Reading"},
+    "https://www.csoonline.com/index.rss": {"name": "CSO Online"},
+}
+
+ipv4 = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
+domain = re.compile(r"\b(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}\b")
+cve = re.compile(r"(CVE-\d{4}-\d{4,7})", re.I)
+
+
+def _clean_text(value: Optional[str]) -> str:
+    if not value:
+        return ""
+    return " ".join(value.replace("\n", " ").split())
+
+
+def _parse_datetime(entry) -> str:
+    for key in ("published", "updated", "created"):
+        value = entry.get(key)
+        if not value:
+            continue
+        try:
+            parsed = parsedate_to_datetime(value)
+            if not parsed.tzinfo:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            return parsed.astimezone(timezone.utc).isoformat()
+        except Exception:
+            continue
+    return datetime.now(tz=timezone.utc).isoformat()
+
+
+def _resolve_source_name(url: str, default: str) -> str:
+    try:
+        netloc = urlparse(url).netloc
+        return netloc.replace("www.", "") if netloc else default
+    except Exception:
+        return default
+
+
+def _extract_image_url(article_url: str) -> Optional[str]:
+    try:
+        resp = requests.get(article_url, timeout=12, headers=HEADERS, allow_redirects=True)
+        resp.raise_for_status()
+    except Exception as exc:
+        print(f"[image] fetch failed for {article_url}: {exc}")
+        return None
+
+    soup = BeautifulSoup(resp.text, "lxml")
+    meta_selectors = [
+        ("meta", {"property": "og:image"}),
+        ("meta", {"name": "og:image"}),
+        ("meta", {"property": "twitter:image"}),
+        ("meta", {"name": "twitter:image"}),
+        ("meta", {"property": "og:image:url"}),
+    ]
+    for tag_name, attrs in meta_selectors:
+        tag = soup.find(tag_name, attrs=attrs)
+        if tag and tag.get("content"):
+            url = tag["content"].strip()
+            if url.startswith("//"):
+                parsed = urlparse(article_url)
+                return f"{parsed.scheme}:{url}"
+            if url.startswith("http"):
+                return url
+    return None
+
+
+def _get_public_url(client, key: str) -> Optional[str]:
+    try:
+        result = client.get_public_url(key)
+        if isinstance(result, dict):
+            return result.get("publicUrl") or result.get("publicURL")
+        return result
+    except Exception:
+        return None
+
+
+def _upload_image_to_supabase(image_url: str) -> Optional[str]:
+    if not image_url:
+        return None
+    file_hash = hashlib.sha256(image_url.encode("utf-8")).hexdigest()
+    key = f"article-thumbnails/{file_hash}"
+
+    # Check if we already uploaded this file by attempting to create a public URL.
+    existing_url = _get_public_url(image_storage, key)
+    if existing_url:
+        return existing_url
+
+    try:
+        resp = requests.get(image_url, timeout=12, headers=HEADERS, stream=True)
+        resp.raise_for_status()
+        content = resp.content
+    except Exception as exc:
+        print(f"[image] download failed for {image_url}: {exc}")
+        return None
+
+    content_type = resp.headers.get("Content-Type", "image/jpeg").split(";")[0]
+    extension = mimetypes.guess_extension(content_type) or ".jpg"
+    key_with_ext = f"{key}{extension}"
+
+    try:
+        buffer = io.BytesIO(content)
+        metadata = {"content-type": content_type}
+        image_storage.upload(key_with_ext, buffer, metadata)
+    except Exception as exc:
+        # Supabase throws if file already exists; try to fetch public URL anyway.
+        if "already exists" not in str(exc).lower():
+            print(f"[supabase:image] upload failed for {image_url}: {exc}")
+
+    try:
+        return _get_public_url(image_storage, key_with_ext)
+    except Exception as exc:
+        print(f"[supabase:image] public url failed: {exc}")
+        return None
+
+
+def _extract_iocs(text: str, batch_id: str) -> List[Dict[str, str]]:
+    matches: List[Dict[str, str]] = []
+    ips = set(ipv4.findall(text))
+    domains_set = set(domain.findall(text))
+    cves = {c.upper() for c in cve.findall(text)}
+
+    matches.extend({"file": batch_id, "type": "ip", "value": ip} for ip in ips)
+    matches.extend({"file": batch_id, "type": "domain", "value": dm} for dm in domains_set)
+    matches.extend({"file": batch_id, "type": "cve", "value": cv} for cv in cves)
+    return matches
+
+
+def _persist_iocs(iocs: Iterable[Dict[str, str]]) -> None:
+    items = list(iocs)
+    if not items:
+        print("[ioc] no indicators extracted")
+        return
+    try:
+        supabase.table("iocs").insert(items).execute()
+        print(f"[ioc] inserted {len(items)} indicators")
+    except Exception as exc:
+        print(f"[ioc] insertion failed: {exc}")
+
+
+def fetch_feeds_and_upload(limit_per_feed: int = 12) -> None:
+    collected: List[Dict[str, str]] = []
+    print("[ingest] fetching live feeds…")
+
+    for feed_url, meta in FEEDS.items():
+        try:
+            parsed = feedparser.parse(feed_url)
+        except Exception as exc:
+            print(f"[feed] failed to parse {feed_url}: {exc}")
+            continue
+
+        source_label = meta.get("name") or _resolve_source_name(feed_url, "Unknown Source")
+
+        for entry in parsed.entries[:limit_per_feed]:
+            link = entry.get("link") or ""
+            if not link:
+                continue
+
+            cleaned_summary = _clean_text(entry.get("summary") or entry.get("description"))
+            article = {
+                "title": _clean_text(entry.get("title")),
+                "description": cleaned_summary,
+                "link": link,
+                "source": feed_url,
+                "source_name": source_label,
+                "published_at": _parse_datetime(entry),
+                "fetched_at": datetime.now(tz=timezone.utc).isoformat(),
+            }
+
+            og_image = _extract_image_url(link)
+            uploaded_url = _upload_image_to_supabase(og_image) if og_image else None
+            article["image_url"] = uploaded_url or og_image or DEFAULT_IMAGE_URL
+            collected.append(article)
+
+    if not collected:
+        print("[ingest] no articles collected. aborting.")
+        return
+
+    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    batch_id = f"live_feed_{timestamp}.json"
+
+    # Upload raw batch to storage
+    try:
+        raw_bytes = json.dumps(collected, indent=2, ensure_ascii=False).encode("utf-8")
+        storage.upload(f"raw-feeds/{batch_id}", io.BytesIO(raw_bytes), {"content-type": "application/json"})
+        print(f"[storage] raw batch uploaded -> raw-feeds/{batch_id}")
+    except Exception as exc:
+        print(f"[storage] failed to upload raw batch: {exc}")
+
+    # Upsert articles into Supabase table (unique per link)
+    try:
+        response = supabase.table("articles").upsert(
+            collected,
+            on_conflict="link",
+        ).execute()
+        inserted = len(response.data) if getattr(response, "data", None) else len(collected)
+        print(f"[articles] upserted {inserted} records")
+    except Exception as exc:
+        print(f"[articles] upsert failed: {exc}")
+
+    # Extract IOCs for this batch
+    all_text = [
+        " ".join(filter(None, [item.get("title"), item.get("description"), item.get("link")]))
+        for item in collected
+    ]
+    indicators = []
+    for text in all_text:
+        indicators.extend(_extract_iocs(text, batch_id))
+    _persist_iocs(indicators)
+
+
+if __name__ == "__main__":
+    fetch_feeds_and_upload()

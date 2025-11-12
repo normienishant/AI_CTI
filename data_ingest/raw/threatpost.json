@@ -1,0 +1,72 @@
+[
+  {
+    "title": "Student Loan Breach Exposes 2.5M Records",
+    "description": "2.5 million people were affected, in a breach that could spell more trouble down the line.",
+    "link": "https://threatpost.com/student-loan-breach-exposes-2-5m-records/180492/",
+    "pubDate": "Wed, 31 Aug 2022 12:57:48 +0000",
+    "fetched_at": "2025-11-08T09:58:04.902921"
+  },
+  {
+    "title": "Watering Hole Attacks Push ScanBox Keylogger",
+    "description": "Researchers uncover a watering hole attack likely carried out by APT TA423, which attempts to plant the ScanBox JavaScript-based reconnaissance tool.",
+    "link": "https://threatpost.com/watering-hole-attacks-push-scanbox-keylogger/180490/",
+    "pubDate": "Tue, 30 Aug 2022 16:00:43 +0000",
+    "fetched_at": "2025-11-08T09:58:04.903023"
+  },
+  {
+    "title": "Tentacles of ‘0ktapus’ Threat Group Victimize 130 Firms",
+    "description": "Over 130 companies tangled in sprawling phishing campaign that spoofed a multi-factor authentication system.",
+    "link": "https://threatpost.com/0ktapus-victimize-130-firms/180487/",
+    "pubDate": "Mon, 29 Aug 2022 14:56:19 +0000",
+    "fetched_at": "2025-11-08T09:58:04.903081"
+  },
+  {
+    "title": "Ransomware Attacks are on the Rise",
+    "description": "Lockbit is by far this summer’s most prolific ransomware group, trailed by two offshoots of the Conti group.",
+    "link": "https://threatpost.com/ransomware-attacks-are-on-the-rise/180481/",
+    "pubDate": "Fri, 26 Aug 2022 16:44:27 +0000",
+    "fetched_at": "2025-11-08T09:58:04.903137"
+  },
+  {
+    "title": "Cybercriminals Are Selling Access to Chinese Surveillance Cameras",
+    "description": "Tens of thousands of cameras have failed to patch a critical, 11-month-old CVE, leaving thousands of organizations exposed.",
+    "link": "https://threatpost.com/cybercriminals-are-selling-access-to-chinese-surveillance-cameras/180478/",
+    "pubDate": "Thu, 25 Aug 2022 18:47:15 +0000",
+    "fetched_at": "2025-11-08T09:58:04.903204"
+  },
+  {
+    "title": "Twitter Whistleblower Complaint: The TL;DR Version",
+    "description": "Twitter is blasted for security and privacy lapses by the company’s former head of security who alleges the social media giant’s actions amount to a national security risk. ",
+    "link": "https://threatpost.com/twitter-whistleblower-tldr-version/180472/",
+    "pubDate": "Wed, 24 Aug 2022 14:17:04 +0000",
+    "fetched_at": "2025-11-08T09:58:04.903261"
+  },
+  {
+    "title": "Firewall Bug Under Active Attack Triggers CISA Warning",
+    "description": "CISA is warning that Palo Alto Networks’ PAN-OS is under active attack and needs to be patched ASAP. ",
+    "link": "https://threatpost.com/firewall-bug-under-active-attack-cisa-warning/180467/",
+    "pubDate": "Tue, 23 Aug 2022 13:19:58 +0000",
+    "fetched_at": "2025-11-08T09:58:04.903321"
+  },
+  {
+    "title": "Fake Reservation Links Prey on Weary Travelers",
+    "description": "Fake travel reservations are exacting more pain from the travel weary, already dealing with the misery of canceled flights and overbooked hotels. ",
+    "link": "https://threatpost.com/reservation-links-prey-on-travelers/180462/",
+    "pubDate": "Mon, 22 Aug 2022 13:59:06 +0000",
+    "fetched_at": "2025-11-08T09:58:04.903379"
+  },
+  {
+    "title": "iPhone Users Urged to Update to Patch 2 Zero-Days",
+    "description": "Separate fixes to macOS and iOS patch respective flaws in the kernel and WebKit that can allow threat actors to take over devices and are under attack.",
+    "link": "https://threatpost.com/iphone-users-urged-to-update-to-patch-2-zero-days-under-attack/180448/",
+    "pubDate": "Fri, 19 Aug 2022 15:25:56 +0000",
+    "fetched_at": "2025-11-08T09:58:04.903449"
+  },
+  {
+    "title": "Google Patches Chrome’s Fifth Zero-Day of the Year",
+    "description": "An insufficient validation input flaw, one of 11 patched in an update this week, could allow for arbitrary code execution and is under active attack.",
+    "link": "https://threatpost.com/google-patches-chromes-fifth-zero-day-of-the-year/180432/",
+    "pubDate": "Thu, 18 Aug 2022 14:31:38 +0000",
+    "fetched_at": "2025-11-08T09:58:04.903509"
+  }
+]

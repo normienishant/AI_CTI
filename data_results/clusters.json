@@ -1,0 +1,38 @@
+{
+  "n_docs": 27,
+  "clusters": {
+    "1": [
+      "live_feed_20251108_152800_0.json",
+      "live_feed_20251108_152800_13.json",
+      "threatpost_0.json"
+    ],
+    "0": [
+      "live_feed_20251108_152800_1.json",
+      "live_feed_20251108_152800_11.json",
+      "live_feed_20251108_152800_12.json",
+      "live_feed_20251108_152800_14.json",
+      "live_feed_20251108_152800_2.json",
+      "live_feed_20251108_152800_3.json",
+      "live_feed_20251108_152800_5.json",
+      "sample_0.json",
+      "threatpost_1.json",
+      "threatpost_2.json",
+      "threatpost_3.json",
+      "threatpost_5.json",
+      "threatpost_7.json"
+    ],
+    "2": [
+      "live_feed_20251108_152800_10.json",
+      "live_feed_20251108_152800_4.json",
+      "live_feed_20251108_152800_6.json",
+      "live_feed_20251108_152800_7.json",
+      "live_feed_20251108_152800_8.json",
+      "live_feed_20251108_152800_9.json",
+      "sample_1.json",
+      "threatpost_4.json",
+      "threatpost_6.json",
+      "threatpost_8.json",
+      "threatpost_9.json"
+    ]
+  }
+}

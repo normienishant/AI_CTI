@@ -1,0 +1,107 @@
+[
+  {
+    "title": "Student Loan Breach Exposes 2.5M Records",
+    "description": "2.5 million people were affected, in a breach that could spell more trouble down the line.",
+    "link": "https://threatpost.com/student-loan-breach-exposes-2-5m-records/180492/",
+    "source": "https://threatpost.com/feed/",
+    "fetched_at": "2025-11-08T15:27:59.724775"
+  },
+  {
+    "title": "Watering Hole Attacks Push ScanBox Keylogger",
+    "description": "Researchers uncover a watering hole attack likely carried out by APT TA423, which attempts to plant the ScanBox JavaScript-based reconnaissance tool.",
+    "link": "https://threatpost.com/watering-hole-attacks-push-scanbox-keylogger/180490/",
+    "source": "https://threatpost.com/feed/",
+    "fetched_at": "2025-11-08T15:27:59.724861"
+  },
+  {
+    "title": "Tentacles of ‘0ktapus’ Threat Group Victimize 130 Firms",
+    "description": "Over 130 companies tangled in sprawling phishing campaign that spoofed a multi-factor authentication system.",
+    "link": "https://threatpost.com/0ktapus-victimize-130-firms/180487/",
+    "source": "https://threatpost.com/feed/",
+    "fetched_at": "2025-11-08T15:27:59.724871"
+  },
+  {
+    "title": "Ransomware Attacks are on the Rise",
+    "description": "Lockbit is by far this summer’s most prolific ransomware group, trailed by two offshoots of the Conti group.",
+    "link": "https://threatpost.com/ransomware-attacks-are-on-the-rise/180481/",
+    "source": "https://threatpost.com/feed/",
+    "fetched_at": "2025-11-08T15:27:59.724879"
+  },
+  {
+    "title": "Cybercriminals Are Selling Access to Chinese Surveillance Cameras",
+    "description": "Tens of thousands of cameras have failed to patch a critical, 11-month-old CVE, leaving thousands of organizations exposed.",
+    "link": "https://threatpost.com/cybercriminals-are-selling-access-to-chinese-surveillance-cameras/180478/",
+    "source": "https://threatpost.com/feed/",
+    "fetched_at": "2025-11-08T15:27:59.724886"
+  },
+  {
+    "title": "Malicious NuGet packages drop disruptive 'time bombs'",
+    "description": "Several malicious packages on NuGet have sabotage payloads scheduled to activate in 2027 and 2028, targeting database implementations and Siemens S7 industrial control devices. [...]",
+    "link": "https://www.bleepingcomputer.com/news/security/malicious-nuget-packages-drop-disruptive-time-bombs/",
+    "source": "https://www.bleepingcomputer.com/feed/",
+    "fetched_at": "2025-11-08T15:27:59.862771"
+  },
+  {
+    "title": "Microsoft testing faster Quick Machine Recovery in Windows 11",
+    "description": "Microsoft is testing a faster version of Quick Machine Recovery (QMR) and updated Smart App Control (SAC), allowing users to toggle it without requiring a Windows clean install. [...]",
+    "link": "https://www.bleepingcomputer.com/news/microsoft/microsoft-testing-faster-quick-machine-recovery-in-windows-11/",
+    "source": "https://www.bleepingcomputer.com/feed/",
+    "fetched_at": "2025-11-08T15:27:59.862783"
+  },
+  {
+    "title": "QNAP fixes seven NAS zero-day flaws exploited at Pwn2Own",
+    "description": "QNAP has fixed seven zero-day vulnerabilities that security researchers exploited to hack QNAP network-attached storage (NAS) devices during the Pwn2Own Ireland 2025 competition. [...]",
+    "link": "https://www.bleepingcomputer.com/news/security/qnap-fixes-seven-nas-zero-day-vulnerabilities-exploited-at-pwn2own/",
+    "source": "https://www.bleepingcomputer.com/feed/",
+    "fetched_at": "2025-11-08T15:27:59.862792"
+  },
+  {
+    "title": "New LandFall spyware exploited Samsung zero-day via WhatsApp messages",
+    "description": "A threat actor exploited a zero-day vulnerability in Samsung's Android image processing library to deploy a previously unknown spyware called 'LandFall' using malicious images sent over WhatsApp. [...]",
+    "link": "https://www.bleepingcomputer.com/news/security/new-landfall-spyware-exploited-samsung-zero-day-via-whatsapp-messages/",
+    "source": "https://www.bleepingcomputer.com/feed/",
+    "fetched_at": "2025-11-08T15:27:59.862800"
+  },
+  {
+    "title": "Cisco: Actively exploited firewall flaws now abused for DoS attacks",
+    "description": "Cisco warned this week that two vulnerabilities, which have been exploited in zero-day attacks, are now being abused to force ASA and FTD firewalls into reboot loops. [...]",
+    "link": "https://www.bleepingcomputer.com/news/security/cisco-actively-exploited-firewall-flaws-now-abused-for-dos-attacks/",
+    "source": "https://www.bleepingcomputer.com/feed/",
+    "fetched_at": "2025-11-08T15:27:59.862810"
+  },
+  {
+    "title": "Samsung Mobile Flaw Exploited as Zero-Day to Deploy LANDFALL Android Spyware",
+    "description": "A now-patched security flaw in Samsung Galaxy Android devices was exploited as a zero-day to deliver a \"commercial-grade\" Android spyware dubbed LANDFALL in targeted attacks in the Middle East. The activity involved the exploitation of CVE-2025-21042 (CVSS score: 8.8), an out-of-bounds write flaw in the \"libimagecodec.quram.so\" component that could allow remote attackers to execute arbitrary",
+    "link": "https://thehackernews.com/2025/11/samsung-zero-click-flaw-exploited-to.html",
+    "source": "https://feeds.feedburner.com/TheHackersNews",
+    "fetched_at": "2025-11-08T15:28:00.548597"
+  },
+  {
+    "title": "From Log4j to IIS, China’s Hackers Turn Legacy Bugs into Global Espionage Tools",
+    "description": "A China-linked threat actor has been attributed to a cyber attack targeting an U.S. non-profit organization with an aim to establish long-term persistence, as part of broader activity aimed at U.S. entities that are linked to or involved in policy issues. The organization, according to a report from Broadcom's Symantec and Carbon Black teams, is \"active in attempting to influence U.S. government",
+    "link": "https://thehackernews.com/2025/11/from-log4j-to-iis-chinas-hackers-turn.html",
+    "source": "https://feeds.feedburner.com/TheHackersNews",
+    "fetched_at": "2025-11-08T15:28:00.548617"
+  },
+  {
+    "title": "Hidden Logic Bombs in Malware-Laced NuGet Packages Set to Detonate Years After Installation",
+    "description": "A set of nine malicious NuGet packages has been identified as capable of dropping time-delayed payloads to sabotage database operations and corrupt industrial control systems. According to software supply chain security company Socket, the packages were published in 2023 and 2024 by a user named \"shanhai666\" and are designed to run malicious code after specific trigger dates in August 2027 and",
+    "link": "https://thehackernews.com/2025/11/hidden-logic-bombs-in-malware-laced.html",
+    "source": "https://feeds.feedburner.com/TheHackersNews",
+    "fetched_at": "2025-11-08T15:28:00.548632"
+  },
+  {
+    "title": "Enterprise Credentials at Risk – Same Old, Same Old?",
+    "description": "Imagine this: Sarah from accounting gets what looks like a routine password reset email from your organization&rsquo;s cloud provider. She clicks the link, types in her credentials, and goes back to her spreadsheet. But unknown to her, she&rsquo;s just made a big mistake. Sarah just accidentally handed over her login details to cybercriminals who are laughing all the way to their dark web",
+    "link": "https://thehackernews.com/2025/11/enterprise-credentials-at-risk-same-old.html",
+    "source": "https://feeds.feedburner.com/TheHackersNews",
+    "fetched_at": "2025-11-08T15:28:00.548646"
+  },
+  {
+    "title": "Google Launches New Maps Feature to Help Businesses Report Review-Based Extortion Attempts",
+    "description": "Google on Thursday said it's rolling out a dedicated form to allow businesses listed on Google Maps to report extortion attempts made by threat actors who post inauthentic bad reviews on the platform and demand ransoms to remove the negative comments. The approach is designed to tackle a common practice called review bombing, where online users intentionally post negative user reviews in an",
+    "link": "https://thehackernews.com/2025/11/google-launches-new-maps-feature-to.html",
+    "source": "https://feeds.feedburner.com/TheHackersNews",
+    "fetched_at": "2025-11-08T15:28:00.548661"
+  }
+]

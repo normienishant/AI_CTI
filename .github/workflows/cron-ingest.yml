@@ -1,0 +1,84 @@
+name: Scheduled Feed Ingestion
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'   # every 30 minutes
+  workflow_dispatch:        # manual trigger
+
+jobs:
+  fetch-feeds:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Setup curl & jq
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y curl jq
+
+      - name: Validate BACKEND_URL secret
+        run: |
+          if [ -z "${{ secrets.BACKEND_URL }}" ]; then
+            echo "Error: BACKEND_URL secret not set. Set it in Settings → Secrets and variables → Actions"
+            exit 1
+          fi
+          echo "Using BACKEND_URL: ${BACKEND_URL_MASKED}"
+        env:
+          BACKEND_URL_MASKED: ${{ secrets.BACKEND_URL }}
+
+      - name: Trigger feed ingestion (with retries)
+        id: trigger
+        run: |
+          BACKEND="${{ secrets.BACKEND_URL }}"
+          ENDPOINT="${BACKEND%/}/fetch_live"
+          echo "Endpoint: $ENDPOINT"
+
+          # retry settings
+          max_attempts=5
+          attempt=0
+          wait=4
+
+          while [ $attempt -lt $max_attempts ]; do
+            attempt=$((attempt+1))
+            echo "Attempt #$attempt -> POST $ENDPOINT"
+
+            # use curl with timeout and capture body + status
+            response=$(curl -sS -w "\n%{http_code}" -X POST "$ENDPOINT" --max-time 30 || true)
+            http_code=$(echo "$response" | tail -n1)
+            body=$(echo "$response" | sed '$d')
+
+            echo "HTTP $http_code"
+            if [ "$http_code" -eq 200 ] || [ "$http_code" -eq 202 ] || [ "$http_code" -eq 204 ]; then
+              echo "✅ Feed ingestion triggered successfully"
+              echo "Response: $body"
+              echo "::set-output name=status::success"
+              exit 0
+            fi
+
+            echo "❌ Ingestion attempt failed (HTTP $http_code)"
+            echo "Body: $body"
+
+            # exponential backoff
+            echo "Waiting $wait seconds before next attempt..."
+            sleep $wait
+            wait=$((wait * 2))
+          done
+
+          echo "All $max_attempts attempts failed. Exiting with failure."
+          echo "::set-output name=status::failed"
+          exit 1
+
+      - name: Optional - Run Full Pipeline (disabled by default)
+        if: false
+        run: |
+          BACKEND="${{ secrets.BACKEND_URL }}"
+          echo "Running full pipeline on $BACKEND/run_all"
+          curl -X POST "${BACKEND%/}/run_all" -sS -o /dev/null || echo "run_all failed"
+
+      - name: Notify on failure (optional)
+        if: failure() && secrets.WEBHOOK_NOTIFY
+        env:
+          WEBHOOK: ${{ secrets.WEBHOOK_NOTIFY }}
+        run: |
+          echo "Sending failure notification..."
+          payload=$(jq -n --arg repo "${{ github.repository }}" --arg run_id "${{ github.run_id }}" --arg url "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" '{text: ("Cron ingest failed for " + $repo + " - <" + $url + "|view logs>")}')
+          curl -sS -X POST -H 'Content-type: application/json' --data "$payload" "$WEBHOOK" || true

@@ -1,0 +1,5 @@
+﻿__pycache__
+.venv
+data_ingest/raw/*
+data_results/*
+.git
