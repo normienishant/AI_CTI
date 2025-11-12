@@ -26,8 +26,9 @@ function formatTimestamp(value) {
 }
 
 export default function ArticleCard({ item }) {
-  const titleRaw = item?.title || item?.file || item?.link || '';
-  const title = humanizeTitle(titleRaw) || 'Untitled';
+  // Prioritize title from Supabase, only fallback to file/link if title is truly missing
+  const titleRaw = item?.title || '';
+  const title = titleRaw ? (humanizeTitle(titleRaw) || titleRaw) : (item?.file || item?.link || 'Untitled');
   const desc = item?.description || item?.summary || 'No description available.';
   const link = item?.link || item?.url || '#';
   const image = item?.image || item?.image_url || FALLBACK_IMAGE;
