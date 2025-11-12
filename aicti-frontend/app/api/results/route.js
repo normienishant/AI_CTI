@@ -3,7 +3,7 @@
  Server-side proxy: forwards requests to BACKEND_URL (default http://127.0.0.1:8000)
 */
 export async function GET(request) {
-  const BACKEND = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+  const BACKEND = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
   try {
     // use global fetch (Next provides it)
     const res = await fetch(`${BACKEND}/results`, { 

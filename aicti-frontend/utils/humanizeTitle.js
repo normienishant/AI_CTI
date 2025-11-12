@@ -1,9 +1,15 @@
 // small helper to prettify filenames like live_feed_20251108_152800_0
 export function humanizeTitle(raw) {
   if (!raw) return '';
-  // if looks like a filename (contains underscores and digits), try to transform
-  const fileLike = /[_-]\d{4,}|^live_feed|^[a-z0-9_]+$/i;
-  if (fileLike.test(raw)) {
+  
+  // If title is already a proper sentence/article title (has spaces, proper capitalization, length > 20 chars), return as-is
+  if (raw.length > 20 && /\s/.test(raw) && !/^[a-z0-9_]+$/.test(raw)) {
+    return raw.trim().replace(/\s{2,}/g, ' ');
+  }
+  
+  // if looks like a filename (contains underscores and digits, no spaces), try to transform
+  const fileLike = /^live_feed|^[a-z0-9_]+$|^[a-z0-9_-]+\d{4,}/i;
+  if (fileLike.test(raw) && !/\s/.test(raw)) {
     // replace underscores and hyphens with space, remove multiple spaces
     const s = raw.replace(/[_\-]+/g, ' ')
                  .replace(/\s{2,}/g, ' ')
