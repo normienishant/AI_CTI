@@ -115,11 +115,22 @@ export default function RightSidebar({ data }) {
           Most recent values from the ingestion pipeline.
         </p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: '0.82rem' }}>
-          {(data?.iocs || []).slice(0, 5).map((item, idx) => (
-            <span key={`${item.value}-${idx}`} style={{ color: '#1f2937', fontWeight: 600 }}>
-              {item.type?.toUpperCase()}: <span style={{ color: '#2563eb' }}>{item.value}</span>
-            </span>
-          ))}
+          {(() => {
+            // Remove duplicates by value, keep first occurrence
+            const seen = new Set();
+            const uniqueIocs = (data?.iocs || []).filter((item) => {
+              if (!item.value) return false;
+              const key = `${item.type}-${item.value}`.toLowerCase();
+              if (seen.has(key)) return false;
+              seen.add(key);
+              return true;
+            });
+            return uniqueIocs.slice(0, 5).map((item, idx) => (
+              <span key={`${item.value}-${idx}`} style={{ color: '#1f2937', fontWeight: 600 }}>
+                {item.type?.toUpperCase()}: <span style={{ color: '#2563eb' }}>{item.value}</span>
+              </span>
+            ));
+          })()}
           {(!data?.iocs || data.iocs.length === 0) && (
             <span className="small-muted">No indicators captured in this batch.</span>
           )}

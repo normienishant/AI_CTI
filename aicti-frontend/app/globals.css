@@ -202,7 +202,7 @@ a {
   align-items: center;
   gap: 48px;
   padding: 8px 16px;
-  animation: ticker-scroll 80s linear infinite;
+  animation: ticker-scroll 150s linear infinite;
 }
 
 .ticker-track {

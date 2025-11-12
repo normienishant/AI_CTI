@@ -112,10 +112,36 @@ def results():
                 ).limit(200).execute()
                 
                 # Sort: published_at DESC first, then fetched_at DESC for nulls
+                # Convert to datetime for proper sorting
+                from datetime import datetime
                 articles_list = articles_resp.data or []
-                articles_list.sort(key=lambda x: (
-                    x.get("published_at") or x.get("fetched_at") or "1970-01-01"
-                ), reverse=True)
+                
+                def get_sort_date(article):
+                    """Get sortable datetime from article"""
+                    date_str = article.get("published_at") or article.get("fetched_at")
+                    if not date_str:
+                        return datetime(1970, 1, 1)
+                    try:
+                        # Handle ISO format strings
+                        if isinstance(date_str, str):
+                            # Clean up the string
+                            date_str = date_str.replace('Z', '+00:00')
+                            # Try parsing with fromisoformat
+                            if '+' in date_str or '-' in date_str[-6:]:
+                                # Has timezone
+                                return datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+                            else:
+                                # No timezone, assume UTC
+                                return datetime.fromisoformat(date_str)
+                        # If already a datetime object
+                        if isinstance(date_str, datetime):
+                            return date_str
+                        return datetime(1970, 1, 1)
+                    except Exception as e:
+                        print(f"[sort] Failed to parse date {date_str}: {e}")
+                        return datetime(1970, 1, 1)
+                
+                articles_list.sort(key=get_sort_date, reverse=True)
                 articles_list = articles_list[:40]  # Take top 40
                 feeds = []
                 for row in articles_list:
