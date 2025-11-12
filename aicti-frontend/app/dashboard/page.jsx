@@ -67,15 +67,46 @@ export default function Dashboard() {
   }, [load]);
 
   const feeds = useMemo(() => {
-    if (data?.feeds?.length) return data.feeds;
-    return (data?.iocs || []).map((item) => ({
-      title: item.title || item.value || item.file || '',
-      link: item.link || '#',
-      description: item.value || '',
-      source: item.type || 'Unknown',
-      fetched_at: item.created_at || null,
-    }));
+    let allFeeds = [];
+    if (data?.feeds?.length) {
+      allFeeds = data.feeds;
+    } else {
+      allFeeds = (data?.iocs || []).map((item) => ({
+        title: item.title || item.value || item.file || '',
+        link: item.link || '#',
+        description: item.value || '',
+        source: item.type || 'Unknown',
+        fetched_at: item.created_at || null,
+      }));
+    }
+    
+    // Sort by date: latest first (published_at or fetched_at)
+    allFeeds.sort((a, b) => {
+      const dateA = a.published_at || a.fetched_at || '';
+      const dateB = b.published_at || b.fetched_at || '';
+      if (!dateA && !dateB) return 0;
+      if (!dateA) return 1; // A goes to end
+      if (!dateB) return -1; // B goes to end
+      return new Date(dateB).getTime() - new Date(dateA).getTime(); // Latest first
+    });
+    
+    return allFeeds;
   }, [data]);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 6; // 5-6 items per page to match sidebar height
+  
+  // Calculate pagination
+  const totalPages = Math.ceil(feeds.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentFeeds = feeds.slice(startIndex, endIndex);
+  
+  // Reset to page 1 when feeds change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [feeds.length]);
 
   const headlineCount = feeds.length;
   const distinctSources = new Set(feeds.map((item) => item.source)).size;
@@ -139,7 +170,61 @@ export default function Dashboard() {
                 No live intelligence yet. Trigger a fetch to populate the desk.
               </div>
             ) : (
-              feeds.map((item) => <ArticleCard key={item.link} item={item} />)
+              <>
+                {currentFeeds.map((item) => (
+                  <ArticleCard key={item.link} item={item} />
+                ))}
+                
+                {/* Pagination Controls */}
+                {totalPages > 1 && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                      gap: 12,
+                      marginTop: 24,
+                      padding: '16px 0',
+                    }}
+                  >
+                    <button
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                      className="btn-ghost"
+                      style={{
+                        opacity: currentPage === 1 ? 0.5 : 1,
+                        cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
+                      }}
+                    >
+                      ← Previous
+                    </button>
+                    
+                    <span
+                      style={{
+                        fontSize: '0.9rem',
+                        fontWeight: 600,
+                        color: '#64748b',
+                        minWidth: 120,
+                        textAlign: 'center',
+                      }}
+                    >
+                      Page {currentPage} of {totalPages}
+                    </span>
+                    
+                    <button
+                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages}
+                      className="btn-ghost"
+                      style={{
+                        opacity: currentPage === totalPages ? 0.5 : 1,
+                        cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
+                      }}
+                    >
+                      Next →
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </div>
           <RightSidebar data={data} />
