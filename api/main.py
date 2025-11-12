@@ -80,22 +80,26 @@ def results():
             try:
                 articles_resp = supabase_client.table("articles").select(
                     "title,description,link,source,source_name,image_url,published_at,fetched_at"
-                ).order("published_at", desc=True).limit(40).execute()
+                ).order("fetched_at", desc=True).limit(40).execute()
                 feeds = []
                 for row in articles_resp.data or []:
                     feeds.append({
-                        "title": row.get("title"),
-                        "description": row.get("description"),
-                        "link": row.get("link"),
-                        "source": row.get("source_name") or row.get("source"),
-                        "raw_source": row.get("source"),
-                        "image": row.get("image_url"),
+                        "title": row.get("title") or "",
+                        "description": row.get("description") or "",
+                        "link": row.get("link") or "",
+                        "source": row.get("source_name") or row.get("source") or "Unknown",
+                        "raw_source": row.get("source") or "",
+                        "image": row.get("image_url") or "",
+                        "image_url": row.get("image_url") or "",
                         "published_at": row.get("published_at"),
                         "fetched_at": row.get("fetched_at"),
                     })
                 out["feeds"] = feeds
+                print(f"[api] Fetched {len(feeds)} articles from Supabase")
             except Exception as supa_err:
                 print(f"[api] Supabase fetch failed: {supa_err}")
+                import traceback
+                traceback.print_exc()
                 out["feeds"] = []
         else:
             out["feeds"] = []

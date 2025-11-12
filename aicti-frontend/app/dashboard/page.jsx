@@ -22,6 +22,10 @@ export default function Dashboard() {
           throw new Error(`API returned ${res.status}`);
         }
         const json = await res.json();
+        console.log('[dashboard] Loaded data:', {
+          feedsCount: json?.feeds?.length || 0,
+          firstFeed: json?.feeds?.[0],
+        });
         setData(json);
       } catch (err) {
         console.error('[dashboard] load error', err);
