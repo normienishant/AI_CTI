@@ -31,11 +31,20 @@ export default function Dashboard() {
         console.log('[dashboard] Loaded data:', {
           feedsCount: json?.feeds?.length || 0,
           firstFeed: json?.feeds?.[0],
+          error: json?.error,
         });
+        
+        // If there's an error in the response, show it
+        if (json.error) {
+          setError(json.error);
+        }
+        
         setData(json);
       } catch (err) {
         console.error('[dashboard] load error', err);
-        setError(err.message || 'Failed to load data.');
+        // Check if error is in response
+        const errorMsg = err.message || 'Failed to load data.';
+        setError(errorMsg);
       } finally {
         if (!silent) setLoading(false);
       }

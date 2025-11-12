@@ -48,20 +48,26 @@ try:
         from supabase import create_client as create_supabase_client
 
         supabase_client = create_supabase_client(SUPABASE_URL, SUPABASE_KEY)
-        # Test connection
+        # Test connection (non-blocking, don't crash if it fails)
         try:
+            # Quick test - don't wait too long
             supabase_client.table("articles").select("id").limit(1).execute()
             SUPABASE_ENABLED = True
             print("[supabase] Client initialized successfully")
         except Exception as test_err:
-            print(f"[supabase] Connection test failed: {test_err}")
-            SUPABASE_ENABLED = False
-            supabase_client = None
+            print(f"[supabase] Connection test failed (will retry on first request): {test_err}")
+            # Don't disable completely - might work on actual requests
+            SUPABASE_ENABLED = True  # Allow it to try on actual requests
+            # supabase_client is still set, just test failed
     else:
         print("[supabase] Missing SUPABASE_URL or SUPABASE_KEY, disabling Supabase")
         SUPABASE_ENABLED = False
+        supabase_client = None
 except Exception as supa_exc:
-    print(f"[supabase] Client initialization failed: {supa_exc}")
+    print(f"[supabase] Client initialization failed (non-fatal): {supa_exc}")
+    import traceback
+    traceback.print_exc()
+    # Don't crash - allow server to start without Supabase
     SUPABASE_ENABLED = False
     supabase_client = None
 
