@@ -5,11 +5,13 @@
 export async function GET(request) {
   const BACKEND = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
   try {
-    // use global fetch (Next provides it)
+    // use global fetch (Next provides it) - always fetch fresh data
     const res = await fetch(`${BACKEND}/results`, { 
       cache: "no-store",
+      next: { revalidate: 0 },
       headers: {
         "Content-Type": "application/json",
+        "Cache-Control": "no-cache, no-store, must-revalidate",
       },
     });
     

@@ -105,11 +105,20 @@ def results():
         if SUPABASE_ENABLED and supabase_client:
             # prefer live articles from Supabase
             try:
+                # Sort by published_at DESC (latest first), fallback to fetched_at if published_at is null
+                # Get all articles, sort in Python for better control
                 articles_resp = supabase_client.table("articles").select(
                     "title,description,link,source,source_name,image_url,published_at,fetched_at"
-                ).order("fetched_at", desc=True).limit(40).execute()
+                ).limit(200).execute()
+                
+                # Sort: published_at DESC first, then fetched_at DESC for nulls
+                articles_list = articles_resp.data or []
+                articles_list.sort(key=lambda x: (
+                    x.get("published_at") or x.get("fetched_at") or "1970-01-01"
+                ), reverse=True)
+                articles_list = articles_list[:40]  # Take top 40
                 feeds = []
-                for row in articles_resp.data or []:
+                for row in articles_list:
                     feeds.append({
                         "title": row.get("title") or "",
                         "description": row.get("description") or "",
@@ -217,8 +226,60 @@ def results():
 @app.post("/fetch_live")
 def fetch_live(background_tasks: BackgroundTasks):
     """Fetch live feeds and upload to Supabase"""
+    # Clean old data first, then fetch new
+    if SUPABASE_ENABLED and supabase_client:
+        background_tasks.add_task(cleanup_old_data)
     background_tasks.add_task(run_cmd, LIVE_SUPABASE)
     return {"status": "live feed ingestion started"}
+
+
+def cleanup_old_data():
+    """Delete articles older than 7 days and keep max 200 recent articles"""
+    if not SUPABASE_ENABLED or not supabase_client:
+        return
+    try:
+        from datetime import datetime, timedelta, timezone
+        
+        # Delete articles older than 7 days
+        cutoff_date = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+        old_articles = supabase_client.table("articles").select("id").lt("fetched_at", cutoff_date).execute()
+        if old_articles.data:
+            ids_to_delete = [row["id"] for row in old_articles.data]
+            for article_id in ids_to_delete:
+                try:
+                    supabase_client.table("articles").delete().eq("id", article_id).execute()
+                except Exception as e:
+                    print(f"[cleanup] Failed to delete article {article_id}: {e}")
+            print(f"[cleanup] Deleted {len(ids_to_delete)} old articles (older than 7 days)")
+        
+        # Keep only latest 200 articles (delete rest)
+        all_articles = supabase_client.table("articles").select("id").order("fetched_at", desc=True).execute()
+        if all_articles.data and len(all_articles.data) > 200:
+            ids_to_keep = {row["id"] for row in all_articles.data[:200]}
+            ids_to_delete = [row["id"] for row in all_articles.data if row["id"] not in ids_to_keep]
+            for article_id in ids_to_delete:
+                try:
+                    supabase_client.table("articles").delete().eq("id", article_id).execute()
+                except Exception as e:
+                    print(f"[cleanup] Failed to delete article {article_id}: {e}")
+            print(f"[cleanup] Deleted {len(ids_to_delete)} excess articles (kept latest 200)")
+        
+        # Clean old IOCs (older than 30 days)
+        ioc_cutoff = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+        old_iocs = supabase_client.table("iocs").select("id").lt("created_at", ioc_cutoff).execute()
+        if old_iocs.data:
+            ioc_ids = [row["id"] for row in old_iocs.data]
+            for ioc_id in ioc_ids:
+                try:
+                    supabase_client.table("iocs").delete().eq("id", ioc_id).execute()
+                except Exception as e:
+                    print(f"[cleanup] Failed to delete IOC {ioc_id}: {e}")
+            print(f"[cleanup] Deleted {len(ioc_ids)} old IOCs (older than 30 days)")
+            
+    except Exception as e:
+        print(f"[cleanup] Error during cleanup: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 @app.post("/run_all")

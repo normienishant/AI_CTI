@@ -17,7 +17,13 @@ export default function Dashboard() {
       if (!silent) setLoading(true);
       try {
         setError(null);
-        const res = await fetch('/api/results');
+        // Add cache-busting timestamp to prevent stale data
+        const res = await fetch(`/api/results?t=${Date.now()}`, {
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache',
+          },
+        });
         if (!res.ok) {
           throw new Error(`API returned ${res.status}`);
         }
