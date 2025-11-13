@@ -83,11 +83,13 @@ CYBERSEC_KEYWORDS = {
     "critical", "severity", "cisa", "msrc", "mitre", "tactics", "techniques", "framework"
 }
 
-# Exclusion keywords (non-security topics)
+# Exclusion keywords (non-security topics) - STRICT FILTERING
 EXCLUDE_KEYWORDS = {
     "phone", "smartphone", "galaxy", "iphone", "android", "oneplus", "samsung", "review",
     "camera", "battery", "display", "specs", "unboxing", "comparison", "flagship",
-    "holiday", "shopping", "deal", "sale", "price", "discount"
+    "holiday", "shopping", "deal", "sale", "price", "discount", "tested", "verdict",
+    "trip", "travel", "photo", "photos", "six flags", "holiday season", "spend money",
+    "hard-earned", "dirty", "webinar", "event", "online event", "explore", "join us"
 }
 
 ipv4 = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
@@ -102,20 +104,23 @@ def _clean_text(value: Optional[str]) -> str:
 
 
 def _is_cybersecurity_article(title: str, description: str) -> bool:
-    """Filter articles to only include cybersecurity-related content."""
+    """Filter articles to only include cybersecurity-related content - STRICT MODE."""
     text = f"{title} {description}".lower()
     
-    # Exclude if contains non-security keywords
+    # STRICT: Exclude if contains non-security keywords (immediate rejection)
     for exclude in EXCLUDE_KEYWORDS:
         if exclude in text:
             return False
     
-    # Include if contains cybersecurity keywords
+    # STRICT: Must contain at least 2 cybersecurity keywords (not just 1)
+    keyword_count = 0
     for keyword in CYBERSEC_KEYWORDS:
         if keyword in text:
-            return True
+            keyword_count += 1
+            if keyword_count >= 2:  # Require at least 2 matches
+                return True
     
-    # If no keywords match, exclude it
+    # If less than 2 keywords match, exclude it
     return False
 
 
@@ -171,12 +176,34 @@ def _extract_image_url(article_url: str) -> Optional[str]:
 
 
 def _get_public_url(client, key: str) -> Optional[str]:
+    """Get public URL from Supabase storage bucket."""
     try:
+        # Try the get_public_url method
         result = client.get_public_url(key)
         if isinstance(result, dict):
-            return result.get("publicUrl") or result.get("publicURL")
-        return result
-    except Exception:
+            url = result.get("publicUrl") or result.get("publicURL") or result.get("public_url")
+            if url:
+                return url
+        if isinstance(result, str) and result.startswith("http"):
+            return result
+        
+        # Fallback: construct URL manually if bucket is public
+        # Format: https://{project_ref}.supabase.co/storage/v1/object/public/{bucket}/{key}
+        supabase_url = os.getenv("SUPABASE_URL", "").rstrip("/")
+        if supabase_url and SUPABASE_IMAGE_BUCKET:
+            # Extract project ref from SUPABASE_URL
+            # e.g., https://xyzabc.supabase.co -> xyzabc
+            try:
+                from urllib.parse import urlparse
+                parsed = urlparse(supabase_url)
+                project_ref = parsed.netloc.split(".")[0]
+                public_url = f"{supabase_url}/storage/v1/object/public/{SUPABASE_IMAGE_BUCKET}/{key}"
+                return public_url
+            except Exception:
+                pass
+        return None
+    except Exception as exc:
+        print(f"[image] get_public_url failed for {key}: {exc}")
         return None
 
 
@@ -184,13 +211,15 @@ def _upload_image_to_supabase(image_url: str) -> Optional[str]:
     if not image_url:
         return None
     file_hash = hashlib.sha256(image_url.encode("utf-8")).hexdigest()[:16]
-    key = f"{file_hash}"
-
-    # Check if we already uploaded this file by attempting to create a public URL.
-    existing_url = _get_public_url(image_storage, key)
-    if existing_url:
-        print(f"[image] Using existing thumbnail: {existing_url}")
-        return existing_url
+    
+    # Try common extensions to find existing file
+    common_extensions = [".jpg", ".jpeg", ".png", ".webp", ".gif"]
+    for ext in common_extensions:
+        key_with_ext = f"{file_hash}{ext}"
+        existing_url = _get_public_url(image_storage, key_with_ext)
+        if existing_url:
+            print(f"[image] Using existing thumbnail: {existing_url}")
+            return existing_url
 
     try:
         resp = requests.get(image_url, timeout=12, headers=HEADERS, stream=True)
@@ -207,18 +236,28 @@ def _upload_image_to_supabase(image_url: str) -> Optional[str]:
     try:
         buffer = io.BytesIO(content)
         metadata = {"content-type": content_type}
-        image_storage.upload(key_with_ext, buffer, metadata)
-        print(f"[image] Uploaded thumbnail: {key_with_ext}")
+        # Try to upload, but if file exists, that's okay - we'll use existing
+        try:
+            image_storage.upload(key_with_ext, buffer, metadata)
+            print(f"[image] Uploaded new thumbnail: {key_with_ext}")
+        except Exception as upload_exc:
+            # File might already exist - that's fine, we'll use the existing one
+            if "already exists" in str(upload_exc).lower() or "duplicate" in str(upload_exc).lower():
+                print(f"[image] Thumbnail already exists: {key_with_ext}, using existing")
+            else:
+                raise upload_exc
     except Exception as exc:
-        # Supabase throws if file already exists; try to fetch public URL anyway.
-        if "already exists" not in str(exc).lower():
-            print(f"[supabase:image] upload failed for {image_url}: {exc}")
+        print(f"[supabase:image] upload failed for {image_url}: {exc}")
 
+    # Always try to get public URL (works for both new uploads and existing files)
     try:
         public_url = _get_public_url(image_storage, key_with_ext)
         if public_url:
-            print(f"[image] Public URL: {public_url}")
-        return public_url
+            print(f"[image] Public URL generated: {public_url}")
+            return public_url
+        else:
+            print(f"[image] WARNING: Failed to get public URL for {key_with_ext}")
+            return None
     except Exception as exc:
         print(f"[supabase:image] public url failed: {exc}")
         return None
@@ -284,9 +323,21 @@ def fetch_feeds_and_upload(limit_per_feed: int = 12) -> None:
                 "fetched_at": datetime.now(tz=timezone.utc).isoformat(),
             }
 
+            # Extract and upload thumbnail
             og_image = _extract_image_url(link)
-            uploaded_url = _upload_image_to_supabase(og_image) if og_image else None
+            uploaded_url = None
+            if og_image:
+                uploaded_url = _upload_image_to_supabase(og_image)
+                if uploaded_url:
+                    print(f"[article] Using Supabase thumbnail: {uploaded_url}")
+                else:
+                    print(f"[article] Failed to upload thumbnail, using OG image: {og_image}")
+            
+            # Prioritize Supabase URL, then OG image, then default
             article["image_url"] = uploaded_url or og_image or DEFAULT_IMAGE_URL
+            if not article["image_url"] or article["image_url"] == DEFAULT_IMAGE_URL:
+                print(f"[article] No thumbnail for: {title[:50]}...")
+            
             collected.append(article)
 
     if not collected:
