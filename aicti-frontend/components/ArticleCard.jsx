@@ -3,6 +3,23 @@ import { humanizeTitle } from '../utils/humanizeTitle';
 const FALLBACK_IMAGE =
   'https://placehold.co/600x360/0f172a/ffffff?text=AI-CTI';
 
+function pickImage(item) {
+  const candidates = [
+    item?.image_url,
+    item?.image,
+    item?.previewImage,
+    item?.thumbnail,
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim().length > 0) {
+      return candidate.trim();
+    }
+  }
+
+  return FALLBACK_IMAGE;
+}
+
 function formatHostname(source) {
   if (!source) return 'Unknown';
   try {
@@ -37,14 +54,14 @@ export default function ArticleCard({ item }) {
   // Prioritize title from Supabase, only fallback to file/link if title is truly missing
   const titleRaw = item?.title || '';
   // Only use humanizeTitle if title looks like a filename, otherwise use as-is
-  const title = titleRaw 
-    ? (titleRaw.length > 20 && /\s/.test(titleRaw) 
-        ? titleRaw.trim() 
+  const title = titleRaw
+    ? (titleRaw.length > 20 && /\s/.test(titleRaw)
+        ? titleRaw.trim()
         : humanizeTitle(titleRaw) || titleRaw)
     : (item?.file || item?.link || 'Untitled');
   const desc = item?.description || item?.summary || 'No description available.';
   const link = item?.link || item?.url || '#';
-  const image = item?.image || item?.image_url || FALLBACK_IMAGE;
+  const image = pickImage(item);
   const source = formatHostname(item?.source || item?.raw_source);
   const published = formatTimestamp(item?.published_at || item?.fetched_at);
 
