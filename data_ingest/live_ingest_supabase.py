@@ -221,14 +221,25 @@ def _upload_image_to_supabase(image_url: str) -> Optional[str]:
         return None
     file_hash = hashlib.sha256(image_url.encode("utf-8")).hexdigest()[:16]
     
+    # Ensure key has no slashes or subdirectories - flat structure only
+    file_hash = file_hash.replace("/", "").replace("\\", "")
+    
     # Try common extensions to find existing file
     common_extensions = [".jpg", ".jpeg", ".png", ".webp", ".gif"]
     for ext in common_extensions:
         key_with_ext = f"{file_hash}{ext}"
         existing_url = _get_public_url(image_storage, key_with_ext)
         if existing_url:
-            print(f"[image] Using existing thumbnail: {existing_url}")
-            return existing_url
+            # Verify the URL actually works by checking if it's accessible
+            try:
+                test_resp = requests.head(existing_url, timeout=5)
+                if test_resp.status_code == 200:
+                    print(f"[image] Using existing thumbnail: {existing_url[:80]}")
+                    return existing_url
+                else:
+                    print(f"[image] Existing URL returned {test_resp.status_code}, will re-upload")
+            except:
+                print(f"[image] Could not verify existing URL, will re-upload")
 
     try:
         resp = requests.get(image_url, timeout=12, headers=HEADERS, stream=True)
@@ -240,7 +251,7 @@ def _upload_image_to_supabase(image_url: str) -> Optional[str]:
 
     content_type = resp.headers.get("Content-Type", "image/jpeg").split(";")[0]
     extension = mimetypes.guess_extension(content_type) or ".jpg"
-    key_with_ext = f"{key}{extension}"
+    key_with_ext = f"{file_hash}{extension}"
 
     try:
         buffer = io.BytesIO(content)
@@ -262,8 +273,31 @@ def _upload_image_to_supabase(image_url: str) -> Optional[str]:
     try:
         public_url = _get_public_url(image_storage, key_with_ext)
         if public_url:
-            print(f"[image] Public URL generated: {public_url}")
-            return public_url
+            # Verify the URL actually works before returning it
+            try:
+                verify_resp = requests.head(public_url, timeout=5, allow_redirects=True)
+                if verify_resp.status_code == 200:
+                    print(f"[image] ✓ Public URL verified and working: {public_url[:80]}")
+                    return public_url
+                else:
+                    print(f"[image] ✗ Public URL returned {verify_resp.status_code}, trying manual construction")
+                    # Try to construct URL manually without any subdirectories
+                    supabase_url = os.getenv("SUPABASE_URL", "").rstrip("/")
+                    if supabase_url:
+                        # Remove any subdirectory from key (like "6/")
+                        clean_key = key_with_ext.lstrip("/").split("/")[-1]  # Get just filename
+                        manual_url = f"{supabase_url}/storage/v1/object/public/{SUPABASE_IMAGE_BUCKET}/{clean_key}"
+                        print(f"[image] Trying clean manual URL: {manual_url[:80]}")
+                        manual_resp = requests.head(manual_url, timeout=5)
+                        if manual_resp.status_code == 200:
+                            print(f"[image] ✓ Clean URL works: {manual_url[:80]}")
+                            return manual_url
+                    print(f"[image] ✗ All URL attempts failed for {key_with_ext}")
+                    return None
+            except Exception as verify_exc:
+                print(f"[image] Could not verify URL: {verify_exc}, returning anyway")
+                # Return URL anyway, let frontend handle it
+                return public_url
         else:
             print(f"[image] WARNING: Failed to get public URL for {key_with_ext}")
             return None
