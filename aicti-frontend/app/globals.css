@@ -5,8 +5,32 @@
   --bg-card: #ffffff;
   --text-default: #0f172a;
   --text-muted: #64748b;
+  --text-subtle: #475569;
   --accent: #2563eb;
+  --accent-soft: rgba(37, 99, 235, 0.12);
   --shadow-card: 0 10px 24px rgba(15, 23, 42, 0.08);
+  --border-soft: #e5e7eb;
+  --border-strong: #cbd5f5;
+  --ticker-bg: #1e293b;
+  --ticker-border: #0f172a;
+  --ticker-text: #f8fafc;
+}
+
+.dark {
+  color-scheme: dark;
+  --bg-page: #0f172a;
+  --bg-card: #111c32;
+  --text-default: #f1f5f9;
+  --text-muted: #94a3b8;
+  --text-subtle: #cbd5f5;
+  --accent: #60a5fa;
+  --accent-soft: rgba(96, 165, 250, 0.18);
+  --shadow-card: 0 18px 32px rgba(15, 23, 42, 0.45);
+  --border-soft: #21304b;
+  --border-strong: #334366;
+  --ticker-bg: #0b1120;
+  --ticker-border: #1f2937;
+  --ticker-text: #e2e8f0;
 }
 
 html,
@@ -16,6 +40,7 @@ body {
   background: var(--bg-page);
   font-family: 'Inter', system-ui, sans-serif;
   color: var(--text-default);
+  transition: background 0.25s ease, color 0.25s ease;
 }
 
 a {
@@ -31,7 +56,8 @@ a {
 
 .site-header {
   background: var(--bg-card);
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--border-soft);
+  transition: background 0.25s ease, border-color 0.25s ease;
 }
 
 .header-inner {
@@ -87,6 +113,11 @@ a {
   color: var(--text-muted);
 }
 
+.main-nav {
+  display: flex;
+  align-items: center;
+}
+
 .main-nav a {
   font-weight: 600;
   color: var(--text-muted);
@@ -94,6 +125,7 @@ a {
   text-transform: uppercase;
   font-size: 0.78rem;
   letter-spacing: 0.14em;
+  transition: color 0.2s ease;
 }
 
 .main-nav a:hover {
@@ -131,24 +163,28 @@ a {
   box-shadow: var(--shadow-card);
   padding: 16px;
   align-items: flex-start;
+  border: 1px solid var(--border-soft);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
 }
 
 .article-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.12);
+  box-shadow: 0 16px 32px rgba(15, 23, 42, 0.16);
+  border-color: var(--border-strong);
 }
 
 .article-thumb {
   width: 120px;
   height: 90px;
   border-radius: 10px;
-  background: linear-gradient(135deg, #dee9ff, #f5f7fb);
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.12), rgba(59, 130, 246, 0.08));
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 0.7rem;
   font-weight: 600;
   color: var(--text-muted);
+  overflow: hidden;
 }
 
 .article-body {
@@ -163,8 +199,8 @@ a {
 .article-body p {
   margin: 0;
   font-size: 0.9rem;
-  line-height: 1.5;
-  color: #334155;
+  line-height: 1.6;
+  color: var(--text-subtle);
 }
 
 .sidebar-card {
@@ -172,6 +208,8 @@ a {
   border-radius: 12px;
   box-shadow: var(--shadow-card);
   padding: 16px;
+  border: 1px solid var(--border-soft);
+  transition: background 0.25s ease, border-color 0.25s ease;
 }
 
 .btn-primary {
@@ -185,6 +223,12 @@ a {
   font-weight: 600;
   color: #ffffff;
   cursor: pointer;
+  transition: transform 0.16s ease, box-shadow 0.16s ease;
+}
+
+.btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.25);
 }
 
 .btn-ghost {
@@ -193,27 +237,28 @@ a {
   gap: 6px;
   padding: 8px 14px;
   border-radius: 8px;
-  border: 1px solid rgba(37, 99, 235, 0.25);
+  border: 1px solid var(--accent);
   background: transparent;
   color: var(--accent);
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.18s ease-in-out;
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
 }
 
 .btn-ghost:hover {
-  background: rgba(37, 99, 235, 0.1);
-  border-color: rgba(37, 99, 235, 0.4);
+  background: var(--accent-soft);
+  border-color: var(--accent);
 }
 
 .ticker-wrapper {
   width: 100%;
-  background: #222831;
-  color: #ffffff;
+  background: var(--ticker-bg);
+  color: var(--ticker-text);
   overflow: hidden;
   white-space: nowrap;
   border-top: 3px solid #dc2626;
-  border-bottom: 1px solid #1f2937;
+  border-bottom: 1px solid var(--ticker-border);
+  transition: background 0.25s ease, color 0.25s ease;
 }
 
 .ticker-inner {
@@ -221,7 +266,7 @@ a {
   align-items: center;
   gap: 48px;
   padding: 8px 16px;
-  animation: ticker-scroll 150s linear infinite;
+  animation: ticker-scroll 200s linear infinite;
 }
 
 .ticker-track {

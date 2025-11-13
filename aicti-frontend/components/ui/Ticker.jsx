@@ -58,7 +58,7 @@ export default function Ticker({ pollInterval = 30000 }) {
 
   return (
     <div className="ticker-wrapper" role="region" aria-label="Breaking news ticker">
-      <div className="ticker-inner" tabIndex={0}>
+      <div className="ticker-inner" tabIndex={0} style={{ animationDuration: '200s' }}>
         <div className="ticker-track">
           <span className="ticker-text">{text}&nbsp;&nbsp;&nbsp;&nbsp;</span>
           <span className="ticker-text">{text}&nbsp;&nbsp;&nbsp;&nbsp;</span>

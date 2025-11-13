@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 
@@ -16,14 +16,43 @@ function formatTimestamp(value) {
   }
 }
 
-export default function StoryClient() {
+export default function StoryClient({ initialArticle = null, linkParam: linkFromServer = '' }) {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const linkParam = searchParams.get('link');
-  const [article, setArticle] = useState(null);
+  const linkParam = searchParams.get('link') || linkFromServer;
+  const [article, setArticle] = useState(initialArticle);
   const [related, setRelated] = useState([]);
   const [error, setError] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!initialArticle);
+
+  useEffect(() => {
+    if (initialArticle) {
+      setArticle(initialArticle);
+      setLoading(false);
+      setError(null);
+    }
+  }, [initialArticle]);
+
+  const fetchArticle = useCallback(async () => {
+    if (!linkParam) return;
+    try {
+      setLoading(true);
+      setError(null);
+      const res = await fetch(`/api/article?link=${encodeURIComponent(linkParam)}`);
+      const data = await res.json();
+      if (data.error) {
+        setError(data.error);
+        setArticle(null);
+      } else {
+        setArticle(data.article);
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to load article.');
+      setArticle(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [linkParam]);
 
   useEffect(() => {
     if (!linkParam) {
@@ -32,27 +61,11 @@ export default function StoryClient() {
       return;
     }
 
-    const controller = new AbortController();
-
-    async function loadArticle() {
-      try {
-        setLoading(true);
-        const res = await fetch(`/api/article?link=${encodeURIComponent(linkParam)}`, {
-          signal: controller.signal,
-        });
-        const data = await res.json();
-        if (data.error) {
-          setError(data.error);
-        } else {
-          setArticle(data.article);
-        }
-      } catch (err) {
-        if (err.name !== 'AbortError') {
-          setError(err.message || 'Failed to load article.');
-        }
-      } finally {
-        setLoading(false);
-      }
+    if (!initialArticle) {
+      fetchArticle();
+    } else {
+      setError(null);
+      setLoading(false);
     }
 
     async function loadRelated() {
@@ -65,11 +78,8 @@ export default function StoryClient() {
       }
     }
 
-    loadArticle();
     loadRelated();
-
-    return () => controller.abort();
-  }, [linkParam]);
+  }, [linkParam, initialArticle, fetchArticle]);
 
   const relatedItems = useMemo(() => {
     if (!article || !related.length) return [];
@@ -77,6 +87,10 @@ export default function StoryClient() {
       .filter((item) => item.link !== article.link)
       .slice(0, 6);
   }, [article, related]);
+
+  const handleRefresh = () => {
+    fetchArticle();
+  };
 
   if (!linkParam) {
     return (
@@ -115,14 +129,15 @@ export default function StoryClient() {
     );
   }
 
-  const { title, description, source, image_url, image, link, published_at, fetched_at } = article;
+  const { title, description, source, image_url, image, link, published_at, fetched_at, highlights = [] } = article;
   const heroImage = image_url || image || 'https://placehold.co/1200x600/0f172a/ffffff?text=AI-CTI';
+  const highlightDeck = Array.isArray(highlights) && highlights.length > 0 ? highlights : [];
 
   return (
     <section className="container" style={{ padding: '48px 24px', maxWidth: 960 }}>
       <article style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
         <div className="sidebar-card" style={{ overflow: 'hidden', padding: 0 }}>
-          <div style={{ position: 'relative', width: '100%', paddingTop: '50%', background: '#0f172a' }}>
+          <div style={{ position: 'relative', width: '100%', paddingTop: '50%', background: 'var(--bg-page)' }}>
             <img
               src={heroImage}
               alt={title}
@@ -132,19 +147,46 @@ export default function StoryClient() {
               }}
             />
           </div>
-          <div style={{ padding: '28px 28px 32px', display: 'grid', gap: 18 }}>
-            <div style={{ textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.32em', color: '#64748b', fontWeight: 600 }}>
+          <div style={{ padding: '32px 32px 36px', display: 'grid', gap: 20 }}>
+            <div style={{ textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.32em', color: 'var(--text-muted)', fontWeight: 600 }}>
               {source || 'Unknown source'}
             </div>
-            <h1 className="h1" style={{ fontSize: '2rem', marginBottom: 4 }}>{title}</h1>
-            <p className="small-muted" style={{ margin: 0 }}>{description}</p>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, fontSize: '0.9rem', color: '#475569' }}>
+            <h1 className="h1" style={{ fontSize: '2.25rem', marginBottom: 4 }}>{title}</h1>
+            <p className="small-muted" style={{ margin: 0, color: 'var(--text-subtle)', fontSize: '1rem' }}>{description}</p>
+            {highlightDeck.length > 0 && (
+              <section style={{ display: 'grid', gap: 14 }}>
+                <h2 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text-default)' }}>Briefing highlights</h2>
+                <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+                  {highlightDeck.map((item, idx) => (
+                    <div
+                      key={idx}
+                      className="sidebar-card"
+                      style={{
+                        padding: '14px 16px',
+                        borderRadius: 10,
+                        border: '1px solid var(--border-soft)',
+                        background: 'var(--bg-card)',
+                        boxShadow: 'none',
+                        fontSize: '0.92rem',
+                        color: 'var(--text-subtle)',
+                      }}
+                    >
+                      {item}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, fontSize: '0.9rem', color: 'var(--text-muted)' }}>
               <span>Published: {formatTimestamp(published_at || fetched_at)}</span>
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
               <a className="btn-primary" href={link} target="_blank" rel="noreferrer">
                 Read original article
               </a>
+              <button type="button" className="btn-ghost" onClick={handleRefresh}>
+                Refresh briefing ↻
+              </button>
               <Link className="btn-ghost" href="/dashboard">
                 ← Back to live desk
               </Link>
@@ -155,7 +197,7 @@ export default function StoryClient() {
         {relatedItems.length > 0 && (
           <section className="sidebar-card" style={{ display: 'grid', gap: 18 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h2 style={{ margin: 0, fontSize: '1.1rem' }}>Related intelligence</h2>
+              <h2 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text-default)' }}>Related intelligence</h2>
               <Link className="btn-ghost" href="/intel">
                 View intel dashboard →
               </Link>
@@ -166,7 +208,7 @@ export default function StoryClient() {
                   <Link className="small-muted" href={`/story?link=${encodeURIComponent(item.link)}`}>
                     {item.title}
                   </Link>
-                  <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>{formatTimestamp(item.published_at || item.fetched_at)}</span>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{formatTimestamp(item.published_at || item.fetched_at)}</span>
                 </div>
               ))}
             </div>

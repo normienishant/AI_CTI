@@ -296,6 +296,7 @@ def article(link: str):
         if not article_payload:
             return {"article": None, "error": "Article not found"}
 
+        article_payload["highlights"] = build_article_highlights(article_payload)
         return {"article": article_payload, "error": None}
 
     except HTTPException:
@@ -426,3 +427,40 @@ def shutdown_event():
     if ENABLE_SCHEDULER and 'scheduler' in globals():
         scheduler.shutdown()
         print("[scheduler] Stopped")
+
+
+def build_article_highlights(article):
+    """Generate brief highlight points for an article payload."""
+    from datetime import datetime
+
+    highlights = []
+    if not article:
+        return highlights
+
+    title = article.get("title") or ""
+    description = article.get("description") or ""
+    source = article.get("source") or article.get("source_name") or article.get("raw_source") or ""
+    published = article.get("published_at") or article.get("fetched_at")
+
+    if title:
+        highlights.append(title)
+    if description:
+        highlights.append(description[:220] + "…" if len(description) > 220 else description)
+    if source:
+        highlights.append(f"Source: {source}")
+    if published:
+        try:
+            ts = published
+            if isinstance(ts, str):
+                ts = ts.replace('Z', '+00:00')
+                stamp = datetime.fromisoformat(ts)
+            elif isinstance(ts, datetime):
+                stamp = ts
+            else:
+                stamp = None
+            if stamp:
+                highlights.append(f"Published: {stamp.strftime('%d %b %Y, %H:%M UTC')}")
+        except Exception:
+            highlights.append(f"Published: {published}")
+
+    return highlights[:4]
