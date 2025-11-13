@@ -76,9 +76,34 @@ except Exception as supa_exc:
 
 def run_cmd(cmd):
     # run a python script via same interpreter
-    print("[api] running", cmd)
-    proc = subprocess.run([sys.executable, cmd], capture_output=True, text=True)
-    return {"returncode": proc.returncode, "stdout": proc.stdout, "stderr": proc.stderr}
+    print(f"[api] Running: {cmd}")
+    print(f"[api] Starting subprocess...")
+    
+    # Use Popen to stream output in real-time
+    proc = subprocess.Popen(
+        [sys.executable, cmd],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,  # Combine stderr into stdout
+        text=True,
+        bufsize=1,  # Line buffered
+        universal_newlines=True
+    )
+    
+    # Print output line by line in real-time
+    stdout_lines = []
+    for line in proc.stdout:
+        line = line.rstrip()
+        if line:  # Only print non-empty lines
+            print(f"[ingest] {line}")
+            stdout_lines.append(line)
+    
+    proc.wait()
+    
+    return {
+        "returncode": proc.returncode,
+        "stdout": "\n".join(stdout_lines),
+        "stderr": ""
+    }
 
 
 @app.post("/ingest")
@@ -153,19 +178,26 @@ def results():
                 articles_list = articles_list[:40]  # Take top 40
                 feeds = []
                 for row in articles_list:
+                    image_url = row.get("image_url") or ""
+                    # Debug: log first few articles' image URLs
+                    if len(feeds) < 3:
+                        print(f"[api] Article '{row.get('title', '')[:50]}' image_url: {image_url[:100] if image_url else 'MISSING'}")
                     feeds.append({
                         "title": row.get("title") or "",
                         "description": row.get("description") or "",
                         "link": row.get("link") or "",
                         "source": row.get("source_name") or row.get("source") or "Unknown",
                         "raw_source": row.get("source") or "",
-                        "image": row.get("image_url") or "",
-                        "image_url": row.get("image_url") or "",
+                        "image": image_url,
+                        "image_url": image_url,
                         "published_at": row.get("published_at"),
                         "fetched_at": row.get("fetched_at"),
                     })
                 out["feeds"] = feeds
                 print(f"[api] Fetched {len(feeds)} articles from Supabase")
+                # Count how many have image_url
+                with_images = sum(1 for f in feeds if f.get("image_url") and f.get("image_url") != "")
+                print(f"[api] Articles with image_url: {with_images}/{len(feeds)}")
             except Exception as supa_err:
                 print(f"[api] Supabase fetch failed: {supa_err}")
                 import traceback
@@ -314,10 +346,19 @@ def article(link: str):
 @app.post("/fetch_live")
 def fetch_live(background_tasks: BackgroundTasks):
     """Fetch live feeds and upload to Supabase"""
+    print("[api] ========================================")
+    print("[api] /fetch_live endpoint called - starting ingestion")
+    print("[api] ========================================")
+    
     # Clean old data first, then fetch new
     if SUPABASE_ENABLED and supabase_client:
+        print("[api] Adding cleanup_old_data task")
         background_tasks.add_task(cleanup_old_data)
+    
+    print(f"[api] Adding ingestion task: {LIVE_SUPABASE}")
     background_tasks.add_task(run_cmd, LIVE_SUPABASE)
+    
+    print("[api] Background tasks queued, returning response")
     return {"status": "live feed ingestion started"}
 
 

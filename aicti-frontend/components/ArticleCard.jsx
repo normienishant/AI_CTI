@@ -86,6 +86,15 @@ export default function ArticleCard({ item }) {
   const risk = item?.risk;
   const tags = Array.isArray(item?.tags) ? item.tags.slice(0, 4) : [];
 
+  // Debug logging for thumbnails
+  if (process.env.NODE_ENV === 'development') {
+    if (!item?.image_url && !item?.image) {
+      console.log('[ArticleCard] No image_url for:', title.substring(0, 50), '| item keys:', Object.keys(item));
+    } else if (image && image !== FALLBACK_IMAGE) {
+      console.log('[ArticleCard] Using image:', image.substring(0, 80), 'for:', title.substring(0, 50));
+    }
+  }
+
   const { toggleSaved, isSaved } = useSavedBriefings();
   const isAlreadySaved = link !== '#' && isSaved(link);
   const handleToggleSaved = () => {

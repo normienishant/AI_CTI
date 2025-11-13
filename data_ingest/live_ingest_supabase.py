@@ -178,29 +178,36 @@ def _extract_image_url(article_url: str) -> Optional[str]:
 def _get_public_url(client, key: str) -> Optional[str]:
     """Get public URL from Supabase storage bucket."""
     try:
-        # Try the get_public_url method
-        result = client.get_public_url(key)
-        if isinstance(result, dict):
-            url = result.get("publicUrl") or result.get("publicURL") or result.get("public_url")
-            if url:
-                return url
-        if isinstance(result, str) and result.startswith("http"):
-            return result
+        # Method 1: Try the get_public_url method
+        try:
+            result = client.get_public_url(key)
+            if isinstance(result, dict):
+                url = result.get("publicUrl") or result.get("publicURL") or result.get("public_url")
+                if url and url.startswith("http"):
+                    print(f"[image] Got public URL from API: {url[:80]}")
+                    return url
+            if isinstance(result, str) and result.startswith("http"):
+                print(f"[image] Got public URL from API (string): {result[:80]}")
+                return result
+        except Exception as api_exc:
+            print(f"[image] get_public_url API method failed: {api_exc}")
         
-        # Fallback: construct URL manually if bucket is public
+        # Method 2: Construct URL manually (fallback)
         # Format: https://{project_ref}.supabase.co/storage/v1/object/public/{bucket}/{key}
         supabase_url = os.getenv("SUPABASE_URL", "").rstrip("/")
         if supabase_url and SUPABASE_IMAGE_BUCKET:
-            # Extract project ref from SUPABASE_URL
-            # e.g., https://xyzabc.supabase.co -> xyzabc
             try:
-                from urllib.parse import urlparse
+                from urllib.parse import urlparse, quote
                 parsed = urlparse(supabase_url)
-                project_ref = parsed.netloc.split(".")[0]
-                public_url = f"{supabase_url}/storage/v1/object/public/{SUPABASE_IMAGE_BUCKET}/{key}"
+                # URL encode the key in case it has special characters
+                encoded_key = quote(key, safe='/')
+                public_url = f"{supabase_url}/storage/v1/object/public/{SUPABASE_IMAGE_BUCKET}/{encoded_key}"
+                print(f"[image] Constructed public URL: {public_url[:80]}")
                 return public_url
-            except Exception:
-                pass
+            except Exception as const_exc:
+                print(f"[image] URL construction failed: {const_exc}")
+        
+        print(f"[image] ✗ Could not generate public URL for {key}")
         return None
     except Exception as exc:
         print(f"[image] get_public_url failed for {key}: {exc}")
@@ -327,16 +334,21 @@ def fetch_feeds_and_upload(limit_per_feed: int = 12) -> None:
             og_image = _extract_image_url(link)
             uploaded_url = None
             if og_image:
+                print(f"[article] Extracted OG image: {og_image[:100]}")
                 uploaded_url = _upload_image_to_supabase(og_image)
                 if uploaded_url:
-                    print(f"[article] Using Supabase thumbnail: {uploaded_url}")
+                    print(f"[article] ✓ Using Supabase thumbnail: {uploaded_url[:100]}")
                 else:
-                    print(f"[article] Failed to upload thumbnail, using OG image: {og_image}")
+                    print(f"[article] ✗ Failed to upload thumbnail, using OG image: {og_image[:100]}")
+            else:
+                print(f"[article] ✗ No OG image found for: {title[:50]}...")
             
             # Prioritize Supabase URL, then OG image, then default
             article["image_url"] = uploaded_url or og_image or DEFAULT_IMAGE_URL
             if not article["image_url"] or article["image_url"] == DEFAULT_IMAGE_URL:
-                print(f"[article] No thumbnail for: {title[:50]}...")
+                print(f"[article] ⚠ No thumbnail for: {title[:50]}... (using default)")
+            else:
+                print(f"[article] ✓ Final image_url set: {article['image_url'][:100]}")
             
             collected.append(article)
 

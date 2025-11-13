@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import ArticleCard from '../../components/ArticleCard';
 import RightSidebar from '../../components/ui/RightSidebar';
 import Ticker from '../../components/ui/Ticker';
-import WhatsNewBanner from '../../components/ui/WhatsNewBanner';
 
 const POLL_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -223,8 +222,6 @@ export default function Dashboard() {
             </div>
           </div>
         </section>
-
-        <WhatsNewBanner />
 
         {error ? (
           <div
