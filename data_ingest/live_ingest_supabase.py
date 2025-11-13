@@ -38,7 +38,7 @@ except Exception as exc:  # pragma: no cover - handled at runtime
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 SUPABASE_BUCKET = os.getenv("SUPABASE_BUCKET", "raw-feeds")
-SUPABASE_IMAGE_BUCKET = os.getenv("SUPABASE_IMAGE_BUCKET", SUPABASE_BUCKET)
+SUPABASE_IMAGE_BUCKET = os.getenv("SUPABASE_IMAGE_BUCKET", "article-thumbnails")
 
 if not SUPABASE_URL or not SUPABASE_KEY:
     raise SystemExit(
@@ -70,9 +70,24 @@ FEEDS: Dict[str, Dict[str, str]] = {
     "https://www.csoonline.com/index.rss": {"name": "CSO Online"},
     "https://www.securityweek.com/feed/": {"name": "SecurityWeek"},
     "https://www.infosecurity-magazine.com/rss/news/": {"name": "Infosecurity Magazine"},
-    "https://www.zdnet.com/topic/security/rss.xml": {"name": "ZDNet Security"},
     "https://www.kaspersky.com/blog/feed/": {"name": "Securelist"},
     "https://www.scmagazine.com/home/feed": {"name": "SC Magazine"},
+}
+
+# Cybersecurity keywords to filter articles
+CYBERSEC_KEYWORDS = {
+    "security", "cyber", "threat", "attack", "breach", "vulnerability", "malware", "ransomware",
+    "phishing", "hack", "exploit", "cve", "zero-day", "data leak", "incident", "compromise",
+    "ioc", "indicator", "apt", "botnet", "trojan", "backdoor", "ddos", "sql injection",
+    "xss", "firewall", "encryption", "cert", "advisory", "alert", "patch", "update",
+    "critical", "severity", "cisa", "msrc", "mitre", "tactics", "techniques", "framework"
+}
+
+# Exclusion keywords (non-security topics)
+EXCLUDE_KEYWORDS = {
+    "phone", "smartphone", "galaxy", "iphone", "android", "oneplus", "samsung", "review",
+    "camera", "battery", "display", "specs", "unboxing", "comparison", "flagship",
+    "holiday", "shopping", "deal", "sale", "price", "discount"
 }
 
 ipv4 = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
@@ -84,6 +99,24 @@ def _clean_text(value: Optional[str]) -> str:
     if not value:
         return ""
     return " ".join(value.replace("\n", " ").split())
+
+
+def _is_cybersecurity_article(title: str, description: str) -> bool:
+    """Filter articles to only include cybersecurity-related content."""
+    text = f"{title} {description}".lower()
+    
+    # Exclude if contains non-security keywords
+    for exclude in EXCLUDE_KEYWORDS:
+        if exclude in text:
+            return False
+    
+    # Include if contains cybersecurity keywords
+    for keyword in CYBERSEC_KEYWORDS:
+        if keyword in text:
+            return True
+    
+    # If no keywords match, exclude it
+    return False
 
 
 def _parse_datetime(entry) -> str:
@@ -150,12 +183,13 @@ def _get_public_url(client, key: str) -> Optional[str]:
 def _upload_image_to_supabase(image_url: str) -> Optional[str]:
     if not image_url:
         return None
-    file_hash = hashlib.sha256(image_url.encode("utf-8")).hexdigest()
-    key = f"article-thumbnails/{file_hash}"
+    file_hash = hashlib.sha256(image_url.encode("utf-8")).hexdigest()[:16]
+    key = f"{file_hash}"
 
     # Check if we already uploaded this file by attempting to create a public URL.
     existing_url = _get_public_url(image_storage, key)
     if existing_url:
+        print(f"[image] Using existing thumbnail: {existing_url}")
         return existing_url
 
     try:
@@ -174,13 +208,17 @@ def _upload_image_to_supabase(image_url: str) -> Optional[str]:
         buffer = io.BytesIO(content)
         metadata = {"content-type": content_type}
         image_storage.upload(key_with_ext, buffer, metadata)
+        print(f"[image] Uploaded thumbnail: {key_with_ext}")
     except Exception as exc:
         # Supabase throws if file already exists; try to fetch public URL anyway.
         if "already exists" not in str(exc).lower():
             print(f"[supabase:image] upload failed for {image_url}: {exc}")
 
     try:
-        return _get_public_url(image_storage, key_with_ext)
+        public_url = _get_public_url(image_storage, key_with_ext)
+        if public_url:
+            print(f"[image] Public URL: {public_url}")
+        return public_url
     except Exception as exc:
         print(f"[supabase:image] public url failed: {exc}")
         return None
@@ -228,9 +266,16 @@ def fetch_feeds_and_upload(limit_per_feed: int = 12) -> None:
             if not link:
                 continue
 
+            title = _clean_text(entry.get("title"))
             cleaned_summary = _clean_text(entry.get("summary") or entry.get("description"))
+            
+            # Filter out non-cybersecurity articles
+            if not _is_cybersecurity_article(title, cleaned_summary):
+                print(f"[filter] Skipping non-cybersecurity article: {title[:60]}...")
+                continue
+
             article = {
-                "title": _clean_text(entry.get("title")),
+                "title": title,
                 "description": cleaned_summary,
                 "link": link,
                 "source": feed_url,

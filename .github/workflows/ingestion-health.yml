@@ -1,0 +1,19 @@
+name: ingestion-health-report
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run ingestion health report
+        env:
+          BACKEND_URL: ${{ secrets.BACKEND_URL }}
+        run: |
+          python scripts/report_health.py

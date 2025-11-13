@@ -1,8 +1,21 @@
 import Link from 'next/link';
+import { Bookmark, BookmarkCheck } from 'lucide-react';
 import { humanizeTitle } from '../utils/humanizeTitle';
+import RiskBadge from './ui/RiskBadge';
+import { useSavedBriefings } from './saved/SavedBriefingsProvider';
 
 const FALLBACK_IMAGE =
   'https://placehold.co/600x360/0f172a/ffffff?text=AI-CTI';
+
+function extractHostname(item) {
+  const link = item?.link || item?.url;
+  if (!link) return null;
+  try {
+    return new URL(link).hostname.replace(/^www\./, '');
+  } catch {
+    return null;
+  }
+}
 
 function pickImage(item) {
   const candidates = [
@@ -16,6 +29,11 @@ function pickImage(item) {
     if (typeof candidate === 'string' && candidate.trim().length > 0) {
       return candidate.trim();
     }
+  }
+
+  const hostname = extractHostname(item);
+  if (hostname) {
+    return `https://logo.clearbit.com/${hostname}`;
   }
 
   return FALLBACK_IMAGE;
@@ -65,6 +83,20 @@ export default function ArticleCard({ item }) {
   const image = pickImage(item);
   const source = formatHostname(item?.source || item?.raw_source);
   const published = formatTimestamp(item?.published_at || item?.fetched_at);
+  const risk = item?.risk;
+  const tags = Array.isArray(item?.tags) ? item.tags.slice(0, 4) : [];
+
+  const { toggleSaved, isSaved } = useSavedBriefings();
+  const isAlreadySaved = link !== '#' && isSaved(link);
+  const handleToggleSaved = () => {
+    toggleSaved({
+      ...item,
+      link,
+      title,
+      source,
+      image_url: image,
+    });
+  };
 
   const encodedLink = link ? encodeURIComponent(link) : '';
 
@@ -86,9 +118,39 @@ export default function ArticleCard({ item }) {
           {source}
           {published ? ` • ${published}` : null}
         </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', margin: '6px 0' }}>
+          <RiskBadge risk={risk} />
+          {tags.map((tag) => (
+            <span
+              key={tag}
+              style={{
+                fontSize: '0.7rem',
+                textTransform: 'uppercase',
+                letterSpacing: '0.1em',
+                background: 'var(--accent-soft)',
+                color: 'var(--accent)',
+                padding: '4px 8px',
+                borderRadius: 999,
+                fontWeight: 600,
+              }}
+            >
+              {tag}
+            </span>
+          ))}
+        </div>
         <h3 className="article-title">{title}</h3>
         <p className="article-excerpt">{desc}</p>
         <div className="article-actions">
+          <button
+            type="button"
+            className="btn-ghost"
+            onClick={handleToggleSaved}
+            disabled={link === '#'}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+          >
+            {isAlreadySaved ? <BookmarkCheck size={16} /> : <Bookmark size={16} />}
+            {isAlreadySaved ? 'Saved' : 'Save'}
+          </button>
           <Link className="btn-primary" href={`/story?link=${encodedLink}`}>
             View briefing
           </Link>

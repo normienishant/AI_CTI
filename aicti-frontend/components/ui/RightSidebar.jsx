@@ -1,4 +1,8 @@
+'use client';
+
 import React, { useMemo } from 'react';
+import Link from 'next/link';
+import { useSavedBriefings } from '../saved/SavedBriefingsProvider';
 
 const STOP_WORDS = new Set([
   'the',
@@ -63,17 +67,37 @@ function summariseIocs(iocs = []) {
   );
 }
 
+function extractHighRiskHeadlines(feeds = []) {
+  return feeds
+    .filter((item) => {
+      const level = item?.risk?.level;
+      return level === 'Critical' || level === 'High';
+    })
+    .slice(0, 4);
+}
+
+function formatEnrichment(enrichment) {
+  if (!enrichment) return '';
+  const { severity, context = [] } = enrichment;
+  const ctx = context.slice(0, 1).join(' • ');
+  return `${severity}${ctx ? ` • ${ctx}` : ''}`;
+}
+
 export default function RightSidebar({ data }) {
   const feeds = data?.feeds || [];
   const lastUpdated =
     feeds?.[0]?.fetched_at || feeds?.[0]?.published_at || data?.generated_at;
   const topics = useMemo(() => buildTopicList(feeds), [feeds]);
   const iocSummary = useMemo(() => summariseIocs(data?.iocs), [data?.iocs]);
+  const highRisk = useMemo(() => extractHighRiskHeadlines(feeds), [feeds]);
+  const enrichedIocs = useMemo(() => (data?.iocs || []).slice(0, 5), [data?.iocs]);
+  const { saved } = useSavedBriefings();
+  const savedBriefings = saved.slice(0, 4);
 
   return (
     <aside style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 16 }}>
       <section className="sidebar-card">
-        <div style={{ fontWeight: 700, marginBottom: 6 }}>Desk status</div>
+        <div style={{ fontWeight: 700, marginBottom: 6, color: 'var(--text-default)' }}>Desk status</div>
         <p className="small-muted" style={{ marginBottom: 12 }}>
           Last synced: {formatTimestamp(lastUpdated)}
         </p>
@@ -99,7 +123,7 @@ export default function RightSidebar({ data }) {
       </section>
 
       <section className="sidebar-card">
-        <div style={{ fontWeight: 700, marginBottom: 6 }}>Trending topics</div>
+        <div style={{ fontWeight: 700, marginBottom: 6, color: 'var(--text-default)' }}>Trending topics</div>
         {topics.length === 0 ? (
           <p className="small-muted">No live topics detected yet.</p>
         ) : (
@@ -114,11 +138,68 @@ export default function RightSidebar({ data }) {
         )}
       </section>
 
+      <section className="sidebar-card">
+        <div style={{ fontWeight: 700, marginBottom: 6, color: 'var(--text-default)' }}>High-risk headlines</div>
+        {highRisk.length === 0 ? (
+          <p className="small-muted">No critical alerts in this batch.</p>
+        ) : (
+          <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {highRisk.map((item) => (
+              <li key={item.link} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <span style={{ fontWeight: 600, color: 'var(--text-default)' }}>{item.title}</span>
+                <span style={{ fontSize: '0.78rem', color: '#ef4444', fontWeight: 600 }}>
+                  {item?.risk?.level} • {item?.risk?.sentiment}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="sidebar-card">
+        <div style={{ fontWeight: 700, marginBottom: 6, color: 'var(--text-default)' }}>Latest indicators</div>
+        {enrichedIocs.length === 0 ? (
+          <p className="small-muted">No indicators extracted yet.</p>
+        ) : (
+          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 10 }}>
+            {enrichedIocs.map((ioc, idx) => (
+              <li key={`${ioc.value}-${idx}`} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  {ioc.type}
+                </span>
+                <span style={{ fontWeight: 600, color: 'var(--text-default)' }}>{ioc.value}</span>
+                <span style={{ fontSize: '0.78rem', color: '#f97316' }}>{formatEnrichment(ioc.enrichment)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="sidebar-card">
+        <div style={{ fontWeight: 700, marginBottom: 6, color: 'var(--text-default)' }}>Saved briefings</div>
+        {savedBriefings.length === 0 ? (
+          <p className="small-muted">Use the bookmark icon on any headline to curate your personal list.</p>
+        ) : (
+          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 10 }}>
+            {savedBriefings.map((item) => (
+              <li key={item.link} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <Link href={`/story?link=${encodeURIComponent(item.link)}`} className="small-muted" style={{ fontWeight: 600 }}>
+                  {item.title || item.link}
+                </Link>
+                <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                  {item.source} • {item.risk_level || 'Unknown risk'}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
       <section className="sidebar-card" style={{ textAlign: 'center' }}>
         <div className="small-muted" style={{ marginBottom: 8 }}>
           Stay ahead of adversaries
         </div>
-        <p style={{ fontSize: '0.85rem', color: '#1f2937', marginBottom: 12 }}>
+        <p style={{ fontSize: '0.85rem', color: 'var(--text-default)', marginBottom: 12 }}>
           Subscribe to the analyst brief for weekly summaries and IOC dumps.
         </p>
         <a

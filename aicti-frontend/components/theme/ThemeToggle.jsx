@@ -2,6 +2,7 @@
 
 import { useTheme } from 'next-themes';
 import { useEffect, useState } from 'react';
+import { Sun, Moon } from 'lucide-react';
 
 export default function ThemeToggle() {
   const { theme, setTheme } = useTheme();
@@ -11,17 +12,18 @@ export default function ThemeToggle() {
 
   if (!mounted) return null;
 
-  const toggle = () => setTheme(theme === 'dark' ? 'light' : 'dark');
+  const isDark = theme === 'dark';
 
   return (
     <button
-      onClick={toggle}
+      onClick={() => setTheme(isDark ? 'light' : 'dark')}
       className="btn-ghost"
-      style={{ marginLeft: 12 }}
-      aria-label="Toggle dark mode"
+      style={{ marginLeft: 12, display: 'inline-flex', alignItems: 'center', gap: 8 }}
+      aria-label={`Activate ${isDark ? 'light' : 'dark'} mode`}
       type="button"
     >
-      {theme === 'dark' ? 'Light' : 'Dark'}
+      {isDark ? <Sun size={16} /> : <Moon size={16} />}
+      {isDark ? 'Light' : 'Dark'}
     </button>
   );
 }

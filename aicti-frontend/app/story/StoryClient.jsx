@@ -3,6 +3,9 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { Bookmark, BookmarkCheck } from 'lucide-react';
+import RiskBadge from '../../components/ui/RiskBadge';
+import { useSavedBriefings } from '../../components/saved/SavedBriefingsProvider';
 
 function formatTimestamp(value) {
   if (!value) return 'Unknown';
@@ -129,9 +132,38 @@ export default function StoryClient({ initialArticle = null, linkParam: linkFrom
     );
   }
 
-  const { title, description, source, image_url, image, link, published_at, fetched_at, highlights = [] } = article;
-  const heroImage = image_url || image || 'https://placehold.co/1200x600/0f172a/ffffff?text=AI-CTI';
+  const {
+    title,
+    description,
+    source,
+    image_url,
+    image,
+    link,
+    published_at,
+    fetched_at,
+    highlights = [],
+    risk = null,
+    tags = [],
+  } = article;
+  const fallbackLogo = (() => {
+    if (!link) return null;
+    try {
+      const hostname = new URL(link).hostname.replace(/^www\./, '');
+      return `https://logo.clearbit.com/${hostname}`;
+    } catch {
+      return null;
+    }
+  })();
+  const heroImage =
+    image_url ||
+    image ||
+    fallbackLogo ||
+    'https://placehold.co/1200x600/0f172a/ffffff?text=AI-CTI';
   const highlightDeck = Array.isArray(highlights) && highlights.length > 0 ? highlights : [];
+  const tagDeck = Array.isArray(tags) ? tags.slice(0, 6) : [];
+  const riskReasons = Array.isArray(risk?.reasons) ? risk.reasons : [];
+  const { toggleSaved, isSaved } = useSavedBriefings();
+  const saved = link && isSaved(link);
 
   return (
     <section className="container" style={{ padding: '48px 24px', maxWidth: 960 }}>
@@ -153,6 +185,45 @@ export default function StoryClient({ initialArticle = null, linkParam: linkFrom
             </div>
             <h1 className="h1" style={{ fontSize: '2.25rem', marginBottom: 4 }}>{title}</h1>
             <p className="small-muted" style={{ margin: 0, color: 'var(--text-subtle)', fontSize: '1rem' }}>{description}</p>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+              <RiskBadge risk={risk} style={{ background: 'rgba(37, 99, 235, 0.12)' }} />
+              {risk && (
+                <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                  Threat sentiment: <strong>{risk.sentiment}</strong> • Score {risk.score || '—'}
+                </span>
+              )}
+            </div>
+            {tagDeck.length > 0 && (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {tagDeck.map((tag) => (
+                  <span
+                    key={tag}
+                    style={{
+                      fontSize: '0.75rem',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.1em',
+                      background: 'var(--accent-soft)',
+                      color: 'var(--accent)',
+                      padding: '4px 10px',
+                      borderRadius: 999,
+                      fontWeight: 600,
+                    }}
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            )}
+            {riskReasons.length > 0 && (
+              <div style={{ display: 'grid', gap: 8 }}>
+                <h2 style={{ margin: '12px 0 0', fontSize: '1rem', color: 'var(--text-default)' }}>Why it matters</h2>
+                <ul style={{ margin: 0, paddingLeft: 20, color: 'var(--text-subtle)', fontSize: '0.92rem' }}>
+                  {riskReasons.slice(0, 4).map((reason, idx) => (
+                    <li key={idx}>{reason}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
             {highlightDeck.length > 0 && (
               <section style={{ display: 'grid', gap: 14 }}>
                 <h2 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text-default)' }}>Briefing highlights</h2>
@@ -181,6 +252,15 @@ export default function StoryClient({ initialArticle = null, linkParam: linkFrom
               <span>Published: {formatTimestamp(published_at || fetched_at)}</span>
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+              <button
+                type="button"
+                className="btn-ghost"
+                onClick={() => toggleSaved({ ...article, link, image_url: heroImage })}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              >
+                {saved ? <BookmarkCheck size={16} /> : <Bookmark size={16} />}
+                {saved ? 'Saved briefing' : 'Save briefing'}
+              </button>
               <a className="btn-primary" href={link} target="_blank" rel="noreferrer">
                 Read original article
               </a>

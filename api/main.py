@@ -1,8 +1,10 @@
 ﻿# api/main.py
-from fastapi import FastAPI, BackgroundTasks, HTTPException
+from fastapi import FastAPI, BackgroundTasks, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 import subprocess, sys, os, json, pathlib
 from pathlib import Path
+from datetime import datetime
+from typing import Optional
 
 app = FastAPI(title="AI-CTI API")
 
@@ -296,6 +298,7 @@ def article(link: str):
         if not article_payload:
             return {"article": None, "error": "Article not found"}
 
+        article_payload = enrich_article(article_payload)
         article_payload["highlights"] = build_article_highlights(article_payload)
         return {"article": article_payload, "error": None}
 
@@ -464,3 +467,196 @@ def build_article_highlights(article):
             highlights.append(f"Published: {published}")
 
     return highlights[:4]
+
+RISK_LEVELS = ["Critical", "High", "Medium", "Low"]
+RISK_KEYWORDS = {
+    "Critical": [
+        "zero-day",
+        "supply chain breach",
+        "nation-state",
+        "mass exploitation",
+        "critical vulnerability",
+        "remote code execution",
+        "rce",
+    ],
+    "High": [
+        "ransomware",
+        "data breach",
+        "leak",
+        "exploit",
+        "zero day",
+        "worm",
+        "botnet",
+        "credential theft",
+    ],
+    "Medium": [
+        "phishing",
+        "malware",
+        "trojan",
+        "backdoor",
+        "denial of service",
+        "ddos",
+    ],
+}
+SUSPICIOUS_TLDS = {"ru", "cn", "su", "top", "xyz", "tk", "ga", "ml", "cf"}
+SAVED_TABLE = "saved_briefings"
+
+
+def classify_article(article):
+    text = " ".join(
+        filter(
+            None,
+            [
+                article.get("title"),
+                article.get("description"),
+                article.get("summary"),
+            ],
+        )
+    ).lower()
+
+    severity = "Low"
+    score = 5
+    reasons = []
+    tags = set()
+
+    for level in RISK_LEVELS:
+        for keyword in RISK_KEYWORDS.get(level, []):
+            if keyword in text:
+                reasons.append(f"Contains keyword: {keyword}")
+                tags.add(keyword.replace(" ", "-"))
+                if RISK_LEVELS.index(level) <= RISK_LEVELS.index(severity):
+                    severity = level
+                score = max(score, 90 if level == "Critical" else 70 if level == "High" else 50)
+
+    if "cve-" in text:
+        reasons.append("Mentions CVE identifier")
+        tags.add("cve")
+        score = max(score, 65)
+        if severity in ("Low", "Medium"):
+            severity = "Medium"
+
+    if article.get("source_name") and any(word in article["source_name"].lower() for word in ["cisa", "msrc", "cert"]):
+        reasons.append("Originates from high-trust advisory source")
+        score = max(score, 60)
+        if severity == "Low":
+            severity = "Medium"
+
+    sentiment = "threat" if severity in ("Critical", "High") else "watch"
+
+    return {
+        "level": severity,
+        "score": score,
+        "reasons": reasons[:4],
+        "tags": sorted(tags)[:6],
+        "sentiment": sentiment,
+    }
+
+
+def enrich_article(article):
+    risk = classify_article(article)
+    article["risk"] = risk
+    article.setdefault("tags", []).extend(risk["tags"])
+    article["tags"] = sorted(set(filter(None, article["tags"])))
+    return article
+
+
+def enrich_ioc_record(record):
+    enrichment = {
+        "severity": "Medium",
+        "context": [],
+    }
+    value = (record.get("value") or "").lower()
+    ioc_type = (record.get("type") or "").lower()
+
+    if ioc_type == "ip" and value:
+        if value.startswith("10.") or value.startswith("192.168") or value.startswith("172.16"):
+            enrichment["severity"] = "Low"
+            enrichment["context"].append("Private address space")
+        else:
+            enrichment["severity"] = "High"
+            enrichment["context"].append("Public IP, potential attacker infrastructure")
+
+    if ioc_type == "domain" and value:
+        tld = value.split('.')[-1]
+        if tld in SUSPICIOUS_TLDS:
+            enrichment["severity"] = "High"
+            enrichment["context"].append(f"Suspicious TLD: .{tld}")
+
+    if ioc_type == "cve" and value:
+        enrichment["severity"] = "High"
+        enrichment["context"].append("Actionable CVE identifier")
+
+    record["enrichment"] = enrichment
+    return record
+
+
+@app.get("/saved")
+def list_saved(client_id: str):
+    if not client_id:
+        raise HTTPException(status_code=400, detail="client_id is required")
+
+    if not SUPABASE_ENABLED or not supabase_client:
+        return {"items": []}
+
+    try:
+        resp = (
+            supabase_client
+            .table(SAVED_TABLE)
+            .select("client_id,link,title,source,image_url,risk_level,risk_score,saved_at")
+            .eq("client_id", client_id)
+            .order("saved_at", desc=True)
+            .limit(50)
+            .execute()
+        )
+        return {"items": resp.data or []}
+    except Exception as exc:
+        print(f"[saved] fetch failed: {exc}")
+        return {"items": []}
+
+
+@app.post("/saved")
+def upsert_saved(payload: dict = Body(...)):
+    if not payload:
+        raise HTTPException(status_code=400, detail="Missing request body")
+
+    client_id = payload.get("client_id")
+    link = payload.get("link")
+    if not client_id or not link:
+        raise HTTPException(status_code=400, detail="client_id and link are required")
+
+    if not SUPABASE_ENABLED or not supabase_client:
+        raise HTTPException(status_code=503, detail="Supabase not configured")
+
+    record = {
+        "client_id": client_id,
+        "link": link,
+        "title": payload.get("title") or "",
+        "source": payload.get("source") or payload.get("source_name") or "Unknown",
+        "image_url": payload.get("image_url") or "",
+        "risk_level": payload.get("risk_level") or payload.get("risk", {}).get("level"),
+        "risk_score": payload.get("risk_score") or payload.get("risk", {}).get("score"),
+        "saved_at": datetime.utcnow().isoformat(),
+    }
+
+    try:
+        supabase_client.table(SAVED_TABLE).upsert(record, on_conflict="client_id,link").execute()
+        return {"status": "saved", "item": record}
+    except Exception as exc:
+        print(f"[saved] upsert failed: {exc}")
+        raise HTTPException(status_code=500, detail="Failed to save briefing")
+
+
+@app.delete("/saved")
+def delete_saved(client_id: str, link: str):
+    if not client_id or not link:
+        raise HTTPException(status_code=400, detail="client_id and link are required")
+
+    if not SUPABASE_ENABLED or not supabase_client:
+        raise HTTPException(status_code=503, detail="Supabase not configured")
+
+    try:
+        supabase_client.table(SAVED_TABLE).delete().eq("client_id", client_id).eq("link", link).execute()
+        return {"status": "removed"}
+    except Exception as exc:
+        print(f"[saved] delete failed: {exc}")
+        raise HTTPException(status_code=500, detail="Failed to remove saved briefing")
