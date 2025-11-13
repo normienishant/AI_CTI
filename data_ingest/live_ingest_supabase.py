@@ -295,8 +295,22 @@ def _persist_iocs(iocs: Iterable[Dict[str, str]]) -> None:
 
 
 def fetch_feeds_and_upload(limit_per_feed: int = 12) -> None:
+    import sys
+    sys.stdout.flush()  # Force flush to ensure logs appear immediately
+    
+    print("=" * 60)
+    print("[ingest] ============================================")
+    print("[ingest] STARTING LIVE FEED INGESTION")
+    print("[ingest] ============================================")
+    print(f"[ingest] Timestamp: {datetime.now(timezone.utc).isoformat()}")
+    print(f"[ingest] Image bucket: {SUPABASE_IMAGE_BUCKET}")
+    print(f"[ingest] Supabase URL: {SUPABASE_URL[:50]}..." if SUPABASE_URL else "[ingest] Supabase URL: NOT SET")
+    print("=" * 60)
+    sys.stdout.flush()
+    
     collected: List[Dict[str, str]] = []
     print("[ingest] fetching live feeds…")
+    sys.stdout.flush()
 
     for feed_url, meta in FEEDS.items():
         try:
@@ -390,4 +404,16 @@ def fetch_feeds_and_upload(limit_per_feed: int = 12) -> None:
 
 
 if __name__ == "__main__":
-    fetch_feeds_and_upload()
+    try:
+        print("[SCRIPT] live_ingest_supabase.py started")
+        print("[SCRIPT] Environment check:")
+        print(f"[SCRIPT]   SUPABASE_URL: {'SET' if SUPABASE_URL else 'MISSING'}")
+        print(f"[SCRIPT]   SUPABASE_KEY: {'SET' if SUPABASE_KEY else 'MISSING'}")
+        print(f"[SCRIPT]   SUPABASE_IMAGE_BUCKET: {SUPABASE_IMAGE_BUCKET}")
+        fetch_feeds_and_upload()
+        print("[SCRIPT] live_ingest_supabase.py completed successfully")
+    except Exception as e:
+        print(f"[SCRIPT] ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+        raise

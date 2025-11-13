@@ -76,34 +76,64 @@ except Exception as supa_exc:
 
 def run_cmd(cmd):
     # run a python script via same interpreter
-    print(f"[api] Running: {cmd}")
-    print(f"[api] Starting subprocess...")
+    print(f"[api] ========================================")
+    print(f"[api] EXECUTING COMMAND: {cmd}")
+    print(f"[api] ========================================")
+    
+    # Check if file exists
+    if not os.path.exists(cmd):
+        error_msg = f"[api] ERROR: Script not found: {cmd}"
+        print(error_msg)
+        return {
+            "returncode": 1,
+            "stdout": "",
+            "stderr": error_msg
+        }
+    
+    print(f"[api] Script exists, starting subprocess...")
     
     # Use Popen to stream output in real-time
-    proc = subprocess.Popen(
-        [sys.executable, cmd],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,  # Combine stderr into stdout
-        text=True,
-        bufsize=1,  # Line buffered
-        universal_newlines=True
-    )
-    
-    # Print output line by line in real-time
-    stdout_lines = []
-    for line in proc.stdout:
-        line = line.rstrip()
-        if line:  # Only print non-empty lines
-            print(f"[ingest] {line}")
-            stdout_lines.append(line)
-    
-    proc.wait()
-    
-    return {
-        "returncode": proc.returncode,
-        "stdout": "\n".join(stdout_lines),
-        "stderr": ""
-    }
+    try:
+        proc = subprocess.Popen(
+            [sys.executable, cmd],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,  # Combine stderr into stdout
+            text=True,
+            bufsize=1,  # Line buffered
+            universal_newlines=True,
+            env=os.environ.copy()  # Pass environment variables
+        )
+        
+        # Print output line by line in real-time
+        stdout_lines = []
+        for line in proc.stdout:
+            line = line.rstrip()
+            if line:  # Only print non-empty lines
+                print(f"[ingest] {line}")
+                stdout_lines.append(line)
+        
+        proc.wait()
+        
+        if proc.returncode != 0:
+            print(f"[api] WARNING: Script exited with code {proc.returncode}")
+        else:
+            print(f"[api] Script completed successfully (exit code 0)")
+        
+        return {
+            "returncode": proc.returncode,
+            "stdout": "\n".join(stdout_lines),
+            "stderr": ""
+        }
+    except Exception as e:
+        error_msg = f"[api] ERROR running command: {e}"
+        print(error_msg)
+        import traceback
+        traceback.print_exc()
+        return {
+            "returncode": 1,
+            "stdout": "",
+            "stderr": error_msg
+        }
 
 
 @app.post("/ingest")
@@ -346,25 +376,37 @@ def article(link: str):
 @app.post("/fetch_live")
 def fetch_live(background_tasks: BackgroundTasks):
     """Fetch live feeds and upload to Supabase"""
+    import sys
+    sys.stdout.flush()  # Force flush to ensure logs appear immediately
+    
     print("[api] ========================================")
     print("[api] /fetch_live endpoint called - starting ingestion")
+    print(f"[api] LIVE_SUPABASE path: {LIVE_SUPABASE}")
+    print(f"[api] File exists: {os.path.exists(LIVE_SUPABASE)}")
     print("[api] ========================================")
+    sys.stdout.flush()
     
     # Clean old data first, then fetch new
     if SUPABASE_ENABLED and supabase_client:
         print("[api] Adding cleanup_old_data task")
         background_tasks.add_task(cleanup_old_data)
+    else:
+        print("[api] WARNING: Supabase not enabled, skipping cleanup")
     
     print(f"[api] Adding ingestion task: {LIVE_SUPABASE}")
+    sys.stdout.flush()
     background_tasks.add_task(run_cmd, LIVE_SUPABASE)
     
     print("[api] Background tasks queued, returning response")
-    return {"status": "live feed ingestion started"}
+    sys.stdout.flush()
+    return {"status": "live feed ingestion started", "script_path": LIVE_SUPABASE, "exists": os.path.exists(LIVE_SUPABASE)}
 
 
 def cleanup_old_data():
     """Delete articles older than 7 days and keep max 200 recent articles"""
+    print("[cleanup] Starting old data cleanup...")
     if not SUPABASE_ENABLED or not supabase_client:
+        print("[cleanup] Supabase not enabled, skipping cleanup")
         return
     try:
         from datetime import datetime, timedelta, timezone
