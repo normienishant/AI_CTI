@@ -11,7 +11,7 @@ const contributors = [
     name: 'Nishant',
     description:
       'Product engineer and security enthusiast focused on translating raw threat data into newsroom-grade intelligence.',
-    linkedin: 'https://www.linkedin.com/in/normienishant/',
+    linkedin: 'https://www.linkedin.com/in/designsbynishant/',
     github: 'https://github.com/normienishant',
   },
   {
@@ -135,7 +135,7 @@ export default function AboutPage() {
             </a>
             <a
               className="btn-ghost"
-              href="https://www.linkedin.com/in/normienishant/"
+              href="https://www.linkedin.com/in/designsbynishant/"
               target="_blank"
               rel="noreferrer"
             >
