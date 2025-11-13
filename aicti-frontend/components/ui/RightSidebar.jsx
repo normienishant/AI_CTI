@@ -91,6 +91,11 @@ export default function RightSidebar({ data }) {
             <span>{iocSummary.domain}</span>
           </div>
         </div>
+        <div style={{ marginTop: 14 }}>
+          <a className="btn-ghost" href="/intel">
+            Open intel dashboard →
+          </a>
+        </div>
       </section>
 
       <section className="sidebar-card">
@@ -109,34 +114,6 @@ export default function RightSidebar({ data }) {
         )}
       </section>
 
-      <section className="sidebar-card">
-        <div style={{ fontWeight: 700, marginBottom: 6 }}>Latest indicators</div>
-        <p className="small-muted" style={{ marginBottom: 10 }}>
-          Most recent values from the ingestion pipeline.
-        </p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: '0.82rem' }}>
-          {(() => {
-            // Remove duplicates by value, keep first occurrence
-            const seen = new Set();
-            const uniqueIocs = (data?.iocs || []).filter((item) => {
-              if (!item.value) return false;
-              const key = `${item.type}-${item.value}`.toLowerCase();
-              if (seen.has(key)) return false;
-              seen.add(key);
-              return true;
-            });
-            return uniqueIocs.slice(0, 5).map((item, idx) => (
-              <span key={`${item.value}-${idx}`} style={{ color: '#1f2937', fontWeight: 600 }}>
-                {item.type?.toUpperCase()}: <span style={{ color: '#2563eb' }}>{item.value}</span>
-              </span>
-            ));
-          })()}
-          {(!data?.iocs || data.iocs.length === 0) && (
-            <span className="small-muted">No indicators captured in this batch.</span>
-          )}
-        </div>
-      </section>
-
       <section className="sidebar-card" style={{ textAlign: 'center' }}>
         <div className="small-muted" style={{ marginBottom: 8 }}>
           Stay ahead of adversaries
@@ -145,11 +122,13 @@ export default function RightSidebar({ data }) {
           Subscribe to the analyst brief for weekly summaries and IOC dumps.
         </p>
         <a
-          href="mailto:threatdesk@ai-cti.io"
+          href="https://www.linkedin.com/in/normienishant/messages/"
           className="btn-primary"
           style={{ justifyContent: 'center' }}
+          target="_blank"
+          rel="noreferrer"
         >
-          Request private briefing
+          Message on LinkedIn
         </a>
       </section>
     </aside>

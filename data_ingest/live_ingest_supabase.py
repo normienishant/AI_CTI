@@ -68,6 +68,11 @@ FEEDS: Dict[str, Dict[str, str]] = {
     "https://feeds.feedburner.com/TheHackersNews": {"name": "The Hacker News"},
     "https://www.darkreading.com/rss.xml": {"name": "Dark Reading"},
     "https://www.csoonline.com/index.rss": {"name": "CSO Online"},
+    "https://www.securityweek.com/feed/": {"name": "SecurityWeek"},
+    "https://www.infosecurity-magazine.com/rss/news/": {"name": "Infosecurity Magazine"},
+    "https://www.zdnet.com/topic/security/rss.xml": {"name": "ZDNet Security"},
+    "https://www.kaspersky.com/blog/feed/": {"name": "Securelist"},
+    "https://www.scmagazine.com/home/feed": {"name": "SC Magazine"},
 }
 
 ipv4 = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")

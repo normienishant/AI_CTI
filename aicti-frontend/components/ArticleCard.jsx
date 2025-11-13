@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { humanizeTitle } from '../utils/humanizeTitle';
 
 const FALLBACK_IMAGE =
@@ -65,6 +66,8 @@ export default function ArticleCard({ item }) {
   const source = formatHostname(item?.source || item?.raw_source);
   const published = formatTimestamp(item?.published_at || item?.fetched_at);
 
+  const encodedLink = link ? encodeURIComponent(link) : '';
+
   return (
     <article className="article-card">
       <div className="article-thumb">
@@ -86,16 +89,12 @@ export default function ArticleCard({ item }) {
         <h3 className="article-title">{title}</h3>
         <p className="article-excerpt">{desc}</p>
         <div className="article-actions">
+          <Link className="btn-primary" href={`/story?link=${encodedLink}`}>
+            View briefing
+          </Link>
           <a href={link} target="_blank" rel="noreferrer" className="btn-ghost">
             Read original
           </a>
-          <button
-            type="button"
-            className="btn-primary"
-            onClick={() => window.open(link, '_blank', 'noopener')}
-          >
-            Open Source
-          </button>
         </div>
       </div>
     </article>

@@ -1,5 +1,5 @@
 ﻿# api/main.py
-from fastapi import FastAPI, BackgroundTasks
+from fastapi import FastAPI, BackgroundTasks, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import subprocess, sys, os, json, pathlib
 from pathlib import Path
@@ -253,6 +253,58 @@ def results():
             "feeds": [],
             "error": str(e)
         }
+
+
+@app.get("/article")
+def article(link: str):
+    if not link:
+        raise HTTPException(status_code=400, detail="link query parameter is required")
+
+    try:
+        article_payload = None
+
+        if SUPABASE_ENABLED and supabase_client:
+            try:
+                article_resp = supabase_client.table("articles").select(
+                    "title,description,link,source,source_name,image_url,published_at,fetched_at"
+                ).eq("link", link).limit(1).execute()
+
+                row = (article_resp.data or [None])[0]
+                if row:
+                    article_payload = {
+                        "title": row.get("title") or "",
+                        "description": row.get("description") or "",
+                        "link": row.get("link") or "",
+                        "source": row.get("source_name") or row.get("source") or "Unknown",
+                        "raw_source": row.get("source") or "",
+                        "image": row.get("image_url") or "",
+                        "image_url": row.get("image_url") or "",
+                        "published_at": row.get("published_at"),
+                        "fetched_at": row.get("fetched_at"),
+                    }
+            except Exception as supa_err:
+                print(f"[api] Supabase single fetch failed: {supa_err}")
+
+        if not article_payload:
+            # Fall back to cached results
+            feed_data = results().get("feeds", [])
+            for item in feed_data:
+                if item.get("link") == link:
+                    article_payload = item
+                    break
+
+        if not article_payload:
+            return {"article": None, "error": "Article not found"}
+
+        return {"article": article_payload, "error": None}
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        print(f"[api] Error in /article endpoint: {exc}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Internal error retrieving article")
 
 
 @app.post("/fetch_live")

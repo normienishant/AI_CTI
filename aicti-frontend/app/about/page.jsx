@@ -11,19 +11,21 @@ const contributors = [
     name: 'Nishant',
     description:
       'Product engineer and security enthusiast focused on translating raw threat data into newsroom-grade intelligence.',
+    linkedin: 'https://www.linkedin.com/in/normienishant/',
+    github: 'https://github.com/normienishant',
   },
   {
-    title: 'AI Research',
+    title: 'AI Research & Automation',
     name: 'AI Copilot',
     description:
-      'Helps automate ingestion, enrichment, and clustering pipelines using Python, FastAPI, and Supabase.',
+      'Supports ingestion, enrichment, and clustering pipelines using Python, FastAPI, and Supabase orchestration.',
   },
 ]
 
 const pillars = [
   {
     headline: 'Live Threat Coverage',
-    body: 'RSS and JSON feeds from trusted security desks (ThreatPost, DarkReading, BleepingComputer, CSO, and more) are fetched every 30 minutes, enriched, and served to the dashboard.',
+    body: 'RSS and JSON feeds from trusted security desks (ThreatPost, DarkReading, BleepingComputer, CSO, SecurityWeek, and more) are fetched every 30 minutes, enriched, and served to the dashboard.',
   },
   {
     headline: 'OG Thumbnails & IOC Extraction',
@@ -90,12 +92,24 @@ export default function AboutPage() {
           <h2 style={{ fontSize: '1.1rem', margin: 0 }}>Who&apos;s behind the desk?</h2>
           <div style={{ display: 'grid', gap: 12 }}>
             {contributors.map((person) => (
-              <div key={person.name} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div key={person.name} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <span style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.12em', color: '#64748b' }}>
                   {person.title}
                 </span>
                 <span style={{ fontSize: '1rem', fontWeight: 600 }}>{person.name}</span>
                 <p className="small-muted" style={{ marginBottom: 0 }}>{person.description}</p>
+                {person.linkedin && (
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <a className="btn-ghost" href={person.linkedin} target="_blank" rel="noreferrer">
+                      Connect on LinkedIn
+                    </a>
+                    {person.github && (
+                      <a className="btn-ghost" href={person.github} target="_blank" rel="noreferrer">
+                        GitHub Profile
+                      </a>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -118,6 +132,14 @@ export default function AboutPage() {
               rel="noreferrer"
             >
               Explore the repository
+            </a>
+            <a
+              className="btn-ghost"
+              href="https://www.linkedin.com/in/normienishant/"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Message on LinkedIn
             </a>
           </div>
         </div>
