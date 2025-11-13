@@ -174,10 +174,20 @@ def results():
                     "title,description,link,source,source_name,image_url,published_at,fetched_at"
                 ).limit(200).execute()
                 
+                # Filter out ZDNet Security and other non-cybersec sources
+                articles_list = articles_resp.data or []
+                filtered_articles = []
+                excluded_sources = ["zdnet", "zdnet security"]
+                for article in articles_list:
+                    source_name = (article.get("source_name") or "").lower()
+                    if any(excluded in source_name for excluded in excluded_sources):
+                        continue
+                    filtered_articles.append(article)
+                articles_list = filtered_articles
+                
                 # Sort: published_at DESC first, then fetched_at DESC for nulls
                 # Convert to datetime for proper sorting
                 from datetime import datetime
-                articles_list = articles_resp.data or []
                 
                 def get_sort_date(article):
                     """Get sortable datetime from article"""

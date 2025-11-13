@@ -285,7 +285,6 @@ a {
   color: var(--ticker-text);
   overflow: hidden;
   white-space: nowrap;
-  border-top: 3px solid #dc2626;
   border-bottom: 1px solid var(--ticker-border);
   transition: background 0.25s ease, color 0.25s ease;
 }
@@ -352,6 +351,142 @@ a {
   .article-thumb {
     width: 100%;
     height: 160px;
+  }
+}
+
+/* Mobile responsive styles */
+@media (max-width: 768px) {
+  .container {
+    padding: 12px;
+  }
+
+  .header-inner {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 0;
+  }
+
+  .brand {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .site-title {
+    font-size: 1.1rem;
+  }
+
+  .site-sub {
+    font-size: 0.75rem;
+  }
+
+  .main-nav {
+    flex-wrap: wrap;
+    gap: 8px;
+    font-size: 0.85rem;
+  }
+
+  .article-card {
+    padding: 12px;
+    gap: 12px;
+  }
+
+  .article-thumb {
+    height: 180px;
+    border-radius: 8px;
+  }
+
+  .article-title {
+    font-size: 1rem;
+    line-height: 1.3;
+  }
+
+  .article-excerpt {
+    font-size: 0.85rem;
+    line-height: 1.5;
+  }
+
+  .article-actions {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .article-actions .btn-primary,
+  .article-actions .btn-ghost {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .sidebar-card {
+    padding: 12px;
+    margin-bottom: 16px;
+  }
+
+  .ticker-text {
+    font-size: 0.8rem;
+  }
+
+  .ticker-inner {
+    gap: 24px;
+    padding: 6px 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .container {
+    padding: 8px;
+  }
+
+  .header-inner {
+    padding: 6px 0;
+  }
+
+  .logo-mark {
+    width: 40px;
+    height: 40px;
+  }
+
+  .logo-mark svg {
+    width: 28px;
+    height: 28px;
+  }
+
+  .site-title {
+    font-size: 1rem;
+  }
+
+  .site-sub {
+    font-size: 0.7rem;
+  }
+
+  .main-nav a {
+    font-size: 0.8rem;
+    padding: 6px 8px;
+  }
+
+  .article-card {
+    padding: 10px;
+  }
+
+  .article-thumb {
+    height: 150px;
+  }
+
+  .article-title {
+    font-size: 0.95rem;
+  }
+
+  .article-meta {
+    font-size: 0.75rem;
+  }
+
+  .article-excerpt {
+    font-size: 0.8rem;
+  }
+
+  .btn-primary,
+  .btn-ghost {
+    font-size: 0.85rem;
+    padding: 6px 12px;
   }
 }
 

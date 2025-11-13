@@ -116,9 +116,21 @@ export default function ArticleCard({ item }) {
           src={image || FALLBACK_IMAGE}
           alt={title}
           loading="lazy"
-          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          style={{ 
+            width: '100%', 
+            height: '100%', 
+            objectFit: 'cover',
+            display: 'block',
+            backgroundColor: 'var(--bg-card)'
+          }}
           onError={(event) => {
+            console.log('[ArticleCard] Image failed to load:', image);
             event.currentTarget.src = FALLBACK_IMAGE;
+          }}
+          onLoad={() => {
+            if (image && image !== FALLBACK_IMAGE) {
+              console.log('[ArticleCard] Image loaded successfully:', image.substring(0, 80));
+            }
           }}
         />
       </div>

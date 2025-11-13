@@ -89,7 +89,9 @@ EXCLUDE_KEYWORDS = {
     "camera", "battery", "display", "specs", "unboxing", "comparison", "flagship",
     "holiday", "shopping", "deal", "sale", "price", "discount", "tested", "verdict",
     "trip", "travel", "photo", "photos", "six flags", "holiday season", "spend money",
-    "hard-earned", "dirty", "webinar", "event", "online event", "explore", "join us"
+    "hard-earned", "dirty", "webinar", "event", "online event", "explore", "join us",
+    "tablet", "amazon", "bang-for-buck", "popular tablets", "readers bought", "older model",
+    "windows sucks", "how to fix", "marketing tool", "agentic os", "task manager"
 }
 
 ipv4 = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
