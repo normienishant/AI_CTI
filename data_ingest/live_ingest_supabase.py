@@ -230,16 +230,26 @@ def _upload_image_to_supabase(image_url: str) -> Optional[str]:
         key_with_ext = f"{file_hash}{ext}"
         existing_url = _get_public_url(image_storage, key_with_ext)
         if existing_url:
-            # Verify the URL actually works by checking if it's accessible
+            # CRITICAL: Verify the URL actually works by checking if it's accessible
             try:
-                test_resp = requests.head(existing_url, timeout=5)
+                test_resp = requests.head(existing_url, timeout=5, allow_redirects=True)
                 if test_resp.status_code == 200:
-                    print(f"[image] Using existing thumbnail: {existing_url[:80]}")
+                    print(f"[image] ✓ Verified existing thumbnail works: {existing_url}")
                     return existing_url
                 else:
-                    print(f"[image] Existing URL returned {test_resp.status_code}, will re-upload")
-            except:
-                print(f"[image] Could not verify existing URL, will re-upload")
+                    print(f"[image] ✗ Existing URL returned {test_resp.status_code}, URL: {existing_url[:100]}")
+                    # Try clean URL without any subdirectories
+                    supabase_url = os.getenv("SUPABASE_URL", "").rstrip("/")
+                    if supabase_url:
+                        clean_key = key_with_ext.lstrip("/").split("/")[-1]
+                        clean_url = f"{supabase_url}/storage/v1/object/public/{SUPABASE_IMAGE_BUCKET}/{clean_key}"
+                        clean_resp = requests.head(clean_url, timeout=5)
+                        if clean_resp.status_code == 200:
+                            print(f"[image] ✓ Clean URL works: {clean_url}")
+                            return clean_url
+                    print(f"[image] Will re-upload with new key")
+            except Exception as verify_err:
+                print(f"[image] ✗ Could not verify existing URL ({verify_err}), will re-upload")
 
     try:
         resp = requests.get(image_url, timeout=12, headers=HEADERS, stream=True)
