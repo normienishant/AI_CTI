@@ -203,7 +203,7 @@ export default function RightSidebar({ data }) {
           Subscribe to the analyst brief for weekly summaries and IOC dumps.
         </p>
         <a
-          href="https://www.linkedin.com/in/designsbynishant/messages/"
+          href="https://www.linkedin.com/in/designsbynishant"
           className="btn-primary"
           style={{ justifyContent: 'center' }}
           target="_blank"
