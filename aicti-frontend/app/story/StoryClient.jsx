@@ -19,6 +19,19 @@ function formatTimestamp(value) {
   }
 }
 
+function sanitizeCopy(value) {
+  if (!value) return '';
+  if (typeof value !== 'string') return String(value);
+  return value
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export default function StoryClient({ initialArticle = null, linkParam: linkFromServer = '' }) {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -145,6 +158,7 @@ export default function StoryClient({ initialArticle = null, linkParam: linkFrom
     risk = null,
     tags = [],
   } = article;
+  const cleanDescription = sanitizeCopy(description);
   const fallbackLogo = (() => {
     if (!link) return null;
     try {
@@ -184,7 +198,9 @@ export default function StoryClient({ initialArticle = null, linkParam: linkFrom
               {source || 'Unknown source'}
             </div>
             <h1 className="h1" style={{ fontSize: '2.25rem', marginBottom: 4 }}>{title}</h1>
-            <p className="small-muted" style={{ margin: 0, color: 'var(--text-subtle)', fontSize: '1rem' }}>{description}</p>
+            <p className="small-muted" style={{ margin: 0, color: 'var(--text-subtle)', fontSize: '1rem' }}>
+              {cleanDescription || 'No summary available for this article.'}
+            </p>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
               <RiskBadge risk={risk} style={{ background: 'rgba(37, 99, 235, 0.12)' }} />
               {risk && (

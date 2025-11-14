@@ -17,8 +17,8 @@ export default function ThemeToggle() {
   return (
     <button
       onClick={() => setTheme(isDark ? 'light' : 'dark')}
-      className="btn-ghost"
-      style={{ marginLeft: 12, display: 'inline-flex', alignItems: 'center', gap: 8 }}
+      className="btn-ghost theme-toggle-btn"
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
       aria-label={`Activate ${isDark ? 'light' : 'dark'} mode`}
       type="button"
     >

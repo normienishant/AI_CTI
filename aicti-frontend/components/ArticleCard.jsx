@@ -17,6 +17,21 @@ function extractHostname(item) {
   }
 }
 
+function stripHtml(value) {
+  if (!value) return '';
+  if (typeof value !== 'string') {
+    return String(value);
+  }
+  return value
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function pickImage(item) {
   const candidates = [
     item?.image_url,
@@ -78,7 +93,8 @@ export default function ArticleCard({ item }) {
         ? titleRaw.trim()
         : humanizeTitle(titleRaw) || titleRaw)
     : (item?.file || item?.link || 'Untitled');
-  const desc = item?.description || item?.summary || 'No description available.';
+  const rawDesc = item?.description || item?.summary || '';
+  const desc = stripHtml(rawDesc) || 'No description available.';
   const link = item?.link || item?.url || '#';
   const image = pickImage(item);
   const source = formatHostname(item?.source || item?.raw_source);

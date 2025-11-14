@@ -1,10 +1,11 @@
 ﻿# api/main.py
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
-import subprocess, sys, os, json, pathlib
+import subprocess, sys, os, json, pathlib, re
 from pathlib import Path
 from datetime import datetime
 from typing import Optional
+from html import unescape
 
 app = FastAPI(title="AI-CTI API")
 
@@ -39,6 +40,17 @@ CLUST = os.path.join(BASE, "models", "clustering.py")
 LIVE_SUPABASE = os.path.join(BASE, "data_ingest", "live_ingest_supabase.py")
 RESULTS_DIR = Path(BASE) / "data_results"
 PROC_DIR = Path(BASE) / "data_ingest" / "processed"
+
+TAG_RE = re.compile(r"<[^>]+>")
+
+
+def clean_text(value: Optional[str]) -> str:
+    if not value:
+        return ""
+    text = unescape(value)
+    text = TAG_RE.sub(" ", text)
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_KEY")
@@ -215,7 +227,20 @@ def results():
                         return datetime(1970, 1, 1)
                 
                 articles_list.sort(key=get_sort_date, reverse=True)
-                articles_list = articles_list[:40]  # Take top 40
+
+                # Deduplicate by canonical link/title to prevent duplicate cards
+                seen_keys = set()
+                unique_articles = []
+                for row in articles_list:
+                    candidate_key = (row.get("link") or "").strip().lower()
+                    if not candidate_key:
+                        candidate_key = f"{(row.get('title') or '').strip().lower()}::{row.get('source_name') or row.get('source')}"
+                    if candidate_key in seen_keys:
+                        continue
+                    seen_keys.add(candidate_key)
+                    unique_articles.append(row)
+
+                articles_list = unique_articles[:40]  # Take top 40 unique entries
                 feeds = []
                 for row in articles_list:
                     image_url = row.get("image_url") or ""
@@ -224,7 +249,7 @@ def results():
                         print(f"[api] Article '{row.get('title', '')[:50]}' image_url: {image_url[:100] if image_url else 'MISSING'}")
                     feeds.append({
                         "title": row.get("title") or "",
-                        "description": row.get("description") or "",
+                        "description": clean_text(row.get("description") or ""),
                         "link": row.get("link") or "",
                         "source": row.get("source_name") or row.get("source") or "Unknown",
                         "raw_source": row.get("source") or "",
@@ -347,7 +372,7 @@ def article(link: str):
                 if row:
                     article_payload = {
                         "title": row.get("title") or "",
-                        "description": row.get("description") or "",
+                        "description": clean_text(row.get("description") or ""),
                         "link": row.get("link") or "",
                         "source": row.get("source_name") or row.get("source") or "Unknown",
                         "raw_source": row.get("source") or "",

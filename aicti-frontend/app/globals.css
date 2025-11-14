@@ -116,16 +116,22 @@ a {
 .main-nav {
   display: flex;
   align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .main-nav a {
   font-weight: 600;
   color: var(--text-muted);
-  margin-left: 18px;
+  margin-left: 0;
   text-transform: uppercase;
   font-size: 0.78rem;
   letter-spacing: 0.14em;
   transition: color 0.2s ease;
+}
+
+.main-nav .theme-toggle-btn {
+  margin-left: auto;
 }
 
 .main-nav a:hover {
@@ -362,13 +368,32 @@ a {
 
   .header-inner {
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 12px;
     padding: 8px 0;
   }
 
   .brand {
     flex: 1;
     min-width: 0;
+  }
+
+  .main-nav {
+    width: 100%;
+    border-top: 1px solid var(--border-soft);
+    padding-top: 8px;
+    justify-content: space-between;
+  }
+
+  .main-nav a,
+  .main-nav .btn-ghost {
+    flex: 1 1 calc(50% - 8px);
+    text-align: center;
+    margin: 0;
+    justify-content: center;
+  }
+
+  .main-nav .btn-ghost {
+    margin-left: 0;
   }
 
   .site-title {
@@ -458,9 +483,17 @@ a {
     font-size: 0.7rem;
   }
 
-  .main-nav a {
-    font-size: 0.8rem;
-    padding: 6px 8px;
+  .main-nav {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .main-nav a,
+  .main-nav .btn-ghost {
+    flex: 1 1 100%;
+    font-size: 0.82rem;
+    padding: 8px 10px;
   }
 
   .article-card {
