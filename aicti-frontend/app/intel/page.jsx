@@ -351,7 +351,7 @@ export default function IntelDesk() {
           >
             Message on LinkedIn
           </a>
-          <a className="btn-ghost" href="mailto:threatdesk@ai-cti.io">
+          <a className="btn-ghost" href="mailto:nishantiguess@gmail.com">
             Email the desk
           </a>
         </div>
