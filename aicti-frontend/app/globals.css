@@ -253,25 +253,33 @@ a {
   align-items: center;
   gap: 6px;
   background: #1a1a1a !important;
-  border: none !important;
+  border: 2px solid #1a1a1a !important;
   border-radius: 8px;
   padding: 8px 14px;
   font-weight: 600;
   color: #ffffff !important;
   cursor: pointer;
-  transition: transform 0.16s ease, box-shadow 0.16s ease, opacity 0.16s ease;
+  transition: all 0.16s ease;
   white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15) !important;
 }
 
 .dark .btn-primary {
   background: #1a1a1a !important;
+  border-color: #2a2a2a !important;
   color: #ffffff !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4) !important;
 }
 
 .btn-primary:hover {
   transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
-  opacity: 0.85;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25) !important;
+  background: #2a2a2a !important;
+  border-color: #2a2a2a !important;
+}
+
+.dark .btn-primary:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6) !important;
   background: #2a2a2a !important;
 }
 
@@ -281,31 +289,36 @@ a {
   gap: 6px;
   padding: 8px 14px;
   border-radius: 8px;
-  border: 1.5px solid #4b5563 !important;
-  background: transparent !important;
+  border: 2px solid #d1d5db !important;
+  background: #ffffff !important;
   color: #1a1a1a !important;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.18s ease;
   white-space: nowrap;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1) !important;
 }
 
 .dark .btn-ghost {
-  border-color: #6b7280 !important;
+  border-color: #4b5563 !important;
+  background: #1f1f1f !important;
   color: #e5e5e5 !important;
-  background: transparent !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3) !important;
 }
 
 .btn-ghost:hover {
-  background: rgba(26, 26, 26, 0.08) !important;
+  background: #f9fafb !important;
   border-color: #1a1a1a !important;
   color: #1a1a1a !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15) !important;
+  transform: translateY(-1px);
 }
 
 .dark .btn-ghost:hover {
-  background: rgba(229, 229, 229, 0.1) !important;
-  border-color: #e5e5e5 !important;
-  color: #e5e5e5 !important;
+  background: #2a2a2a !important;
+  border-color: #6b7280 !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5) !important;
 }
 
 .ticker-wrapper {
