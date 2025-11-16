@@ -85,9 +85,7 @@ function formatTimestamp(value) {
 }
 
 export default function ArticleCard({ item }) {
-  // Prioritize title from Supabase, only fallback to file/link if title is truly missing
   const titleRaw = item?.title || '';
-  // Only use humanizeTitle if title looks like a filename, otherwise use as-is
   const title = titleRaw
     ? (titleRaw.length > 20 && /\s/.test(titleRaw)
         ? titleRaw.trim()
@@ -102,7 +100,7 @@ export default function ArticleCard({ item }) {
   const risk = item?.risk;
   const tags = Array.isArray(item?.tags) ? item.tags.slice(0, 4) : [];
 
-  // Debug logging for thumbnails
+
   if (process.env.NODE_ENV === 'development') {
     if (!item?.image_url && !item?.image) {
       console.log('[ArticleCard] No image_url for:', title.substring(0, 50), '| item keys:', Object.keys(item));

@@ -149,6 +149,34 @@ def _resolve_source_name(url: str, default: str) -> str:
         return default
 
 
+def _get_screenshot_url(article_url: str) -> Optional[str]:
+    """Get screenshot URL using screenshot API service as fallback"""
+    try:
+        # Use microlink.io screenshot API (free, no API key required)
+        screenshot_api = f"https://api.microlink.io/?url={requests.utils.quote(article_url)}&screenshot=true&viewport.width=1200&viewport.height=630"
+        resp = requests.get(screenshot_api, timeout=10, headers=HEADERS)
+        if resp.status_code == 200:
+            data = resp.json()
+            screenshot_url = data.get("data", {}).get("screenshot", {}).get("url")
+            if screenshot_url:
+                print(f"[screenshot] Got screenshot URL from microlink: {screenshot_url[:80]}")
+                return screenshot_url
+    except Exception as exc:
+        print(f"[screenshot] Failed to get screenshot: {exc}")
+    
+    # Fallback: try screenshotapi.net (also free)
+    try:
+        screenshot_api2 = f"https://shot.screenshotapi.net/screenshot?token=free&url={requests.utils.quote(article_url)}&width=1200&height=630&output=image&file_type=png"
+        resp2 = requests.head(screenshot_api2, timeout=8, allow_redirects=True)
+        if resp2.status_code == 200:
+            print(f"[screenshot] Got screenshot URL from screenshotapi: {screenshot_api2[:80]}")
+            return screenshot_api2
+    except Exception as exc:
+        print(f"[screenshot] Fallback screenshot API also failed: {exc}")
+    
+    return None
+
+
 def _extract_image_url(article_url: str) -> Optional[str]:
     try:
         resp = requests.get(article_url, timeout=12, headers=HEADERS, allow_redirects=True)
@@ -393,6 +421,8 @@ def fetch_feeds_and_upload(limit_per_feed: int = 12) -> None:
             # Extract and upload thumbnail
             og_image = _extract_image_url(link)
             uploaded_url = None
+            screenshot_url = None
+            
             if og_image:
                 print(f"[article] Extracted OG image: {og_image[:100]}")
                 uploaded_url = _upload_image_to_supabase(og_image)
@@ -401,10 +431,19 @@ def fetch_feeds_and_upload(limit_per_feed: int = 12) -> None:
                 else:
                     print(f"[article] ✗ Failed to upload thumbnail, using OG image: {og_image[:100]}")
             else:
-                print(f"[article] ✗ No OG image found for: {title[:50]}...")
+                print(f"[article] ✗ No OG image found for: {title[:50]}..., trying screenshot service...")
+                # Try screenshot service as fallback
+                screenshot_url = _get_screenshot_url(link)
+                if screenshot_url:
+                    print(f"[article] Got screenshot URL: {screenshot_url[:100]}")
+                    uploaded_url = _upload_image_to_supabase(screenshot_url)
+                    if uploaded_url:
+                        print(f"[article] ✓ Using screenshot thumbnail: {uploaded_url[:100]}")
+                    else:
+                        print(f"[article] ✗ Failed to upload screenshot, using screenshot URL directly")
             
-            # Prioritize Supabase URL, then OG image, then default
-            article["image_url"] = uploaded_url or og_image or DEFAULT_IMAGE_URL
+            # Prioritize Supabase URL, then OG image, then screenshot, then default
+            article["image_url"] = uploaded_url or og_image or screenshot_url or DEFAULT_IMAGE_URL
             if not article["image_url"] or article["image_url"] == DEFAULT_IMAGE_URL:
                 print(f"[article] ⚠ No thumbnail for: {title[:50]}... (using default)")
             else:

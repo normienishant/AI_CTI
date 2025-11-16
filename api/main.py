@@ -42,6 +42,7 @@ RESULTS_DIR = Path(BASE) / "data_results"
 PROC_DIR = Path(BASE) / "data_ingest" / "processed"
 
 TAG_RE = re.compile(r"<[^>]+>")
+SAVED_TABLE = "saved_briefings"
 
 
 def clean_text(value: Optional[str]) -> str:
@@ -229,15 +230,72 @@ def results():
                 articles_list.sort(key=get_sort_date, reverse=True)
 
                 # Deduplicate by canonical link/title to prevent duplicate cards
+                # Use fuzzy matching for similar titles (e.g., "DoorDash hit by yet another data breach" vs "DoorDash hit by new data breach")
+                def normalize_title(title):
+                    """Normalize title for fuzzy matching"""
+                    if not title:
+                        return ""
+                    # Remove common words, normalize case, remove special chars
+                    title = title.lower().strip()
+                    # Remove common prefixes/suffixes
+                    title = re.sub(r'\b(yet another|new|another|latest|recent)\b', '', title)
+                    # Remove special chars, keep only alphanumeric and spaces
+                    title = re.sub(r'[^\w\s]', '', title)
+                    # Normalize whitespace
+                    title = re.sub(r'\s+', ' ', title).strip()
+                    # Take first 50 chars for comparison (most important part)
+                    return title[:50]
+                
+                def normalize_link(link):
+                    """Normalize link by removing query params and fragments"""
+                    if not link:
+                        return ""
+                    try:
+                        from urllib.parse import urlparse, urlunparse
+                        parsed = urlparse(link.strip().lower())
+                        # Remove query and fragment
+                        normalized = urlunparse((parsed.scheme, parsed.netloc, parsed.path, '', '', ''))
+                        return normalized
+                    except:
+                        return link.strip().lower()
+                
                 seen_keys = set()
+                seen_normalized_titles = {}  # normalized_title -> first article
                 unique_articles = []
                 for row in articles_list:
-                    candidate_key = (row.get("link") or "").strip().lower()
-                    if not candidate_key:
-                        candidate_key = f"{(row.get('title') or '').strip().lower()}::{row.get('source_name') or row.get('source')}"
-                    if candidate_key in seen_keys:
+                    link = row.get("link") or ""
+                    title = row.get("title") or ""
+                    source = (row.get("source_name") or row.get("source") or "").lower()
+                    
+                    # First check exact link match
+                    normalized_link = normalize_link(link)
+                    if normalized_link and normalized_link in seen_keys:
+                        print(f"[dedup] Skipping duplicate link: {link[:80]}")
                         continue
-                    seen_keys.add(candidate_key)
+                    
+                    # Then check fuzzy title match (same source, similar title)
+                    normalized_title = normalize_title(title)
+                    if normalized_title and source:
+                        title_key = f"{normalized_title}::{source}"
+                        if title_key in seen_normalized_titles:
+                            existing = seen_normalized_titles[title_key]
+                            existing_title = existing.get("title", "")
+                            # If titles are very similar (>80% similarity), skip
+                            if normalized_title and len(normalized_title) > 20:
+                                # Simple similarity check: if normalized titles match or one is substring of other
+                                if normalized_title == normalize_title(existing_title) or \
+                                   (len(normalized_title) > 30 and len(normalize_title(existing_title)) > 30 and
+                                    (normalized_title in normalize_title(existing_title) or 
+                                     normalize_title(existing_title) in normalized_title)):
+                                    print(f"[dedup] Skipping similar title: '{title[:60]}' (similar to '{existing_title[:60]}')")
+                                    continue
+                    
+                    # Add to seen sets
+                    if normalized_link:
+                        seen_keys.add(normalized_link)
+                    if normalized_title and source:
+                        seen_normalized_titles[f"{normalized_title}::{source}"] = row
+                    
                     unique_articles.append(row)
 
                 articles_list = unique_articles[:40]  # Take top 40 unique entries
@@ -743,6 +801,7 @@ def upsert_saved(payload: dict = Body(...)):
         raise HTTPException(status_code=400, detail="client_id and link are required")
 
     if not SUPABASE_ENABLED or not supabase_client:
+        print(f"[saved] ERROR: Supabase not enabled. SUPABASE_ENABLED={SUPABASE_ENABLED}, supabase_client={supabase_client is not None}")
         raise HTTPException(status_code=503, detail="Supabase not configured")
 
     record = {
@@ -757,11 +816,15 @@ def upsert_saved(payload: dict = Body(...)):
     }
 
     try:
-        supabase_client.table(SAVED_TABLE).upsert(record, on_conflict="client_id,link").execute()
+        print(f"[saved] Attempting to upsert record: client_id={client_id}, link={link[:80]}, table={SAVED_TABLE}")
+        result = supabase_client.table(SAVED_TABLE).upsert(record, on_conflict="client_id,link").execute()
+        print(f"[saved] ✓ Successfully saved briefing: {link[:80]}")
         return {"status": "saved", "item": record}
     except Exception as exc:
-        print(f"[saved] upsert failed: {exc}")
-        raise HTTPException(status_code=500, detail="Failed to save briefing")
+        print(f"[saved] ✗ upsert failed: {exc}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to save briefing: {str(exc)}")
 
 
 @app.delete("/saved")
