@@ -89,7 +89,6 @@ export default function RightSidebar({ data }) {
     feeds?.[0]?.fetched_at || feeds?.[0]?.published_at || data?.generated_at;
   const topics = useMemo(() => buildTopicList(feeds), [feeds]);
   const iocSummary = useMemo(() => summariseIocs(data?.iocs), [data?.iocs]);
-  const highRisk = useMemo(() => extractHighRiskHeadlines(feeds), [feeds]);
   const enrichedIocs = useMemo(() => (data?.iocs || []).slice(0, 5), [data?.iocs]);
   const { saved, loading: savedLoading, clientId } = useSavedBriefings();
   const savedBriefings = (saved || []).slice(0, 4);
@@ -143,25 +142,7 @@ export default function RightSidebar({ data }) {
         )}
       </section>
 
-      <section className="sidebar-card">
-        <div style={{ fontWeight: 700, marginBottom: 6, color: 'var(--text-default)' }}>High-risk headlines</div>
-        {highRisk.length === 0 ? (
-          <p className="small-muted">No critical alerts in this batch.</p>
-        ) : (
-          <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {highRisk.map((item) => (
-              <li key={item.link} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <span style={{ fontWeight: 600, color: 'var(--text-default)' }}>{item.title}</span>
-                <span style={{ fontSize: '0.78rem', color: '#ef4444', fontWeight: 600 }}>
-                  {item?.risk?.level} • {item?.risk?.sentiment}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <section className="sidebar-card">
+      <section className="sidebar-card" style={{ display: 'none' }}>
         <div style={{ fontWeight: 700, marginBottom: 6, color: 'var(--text-default)' }}>Latest indicators</div>
         {enrichedIocs.length === 0 ? (
           <p className="small-muted">No indicators extracted yet.</p>
@@ -196,12 +177,41 @@ export default function RightSidebar({ data }) {
                       {item.title || item.link}
                     </Link>
                     <button
-                      onClick={async () => {
-                        if (!clientId || !item.link) return;
+                      onClick={async (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (!clientId || !item.link) {
+                          alert('Missing client ID or article link');
+                          return;
+                        }
                         try {
-                          const res = await fetch(`/api/export/pdf/article?clientId=${clientId}&link=${encodeURIComponent(item.link)}`);
-                          if (res.ok) {
+                          console.log('[PDF Export] Starting export for:', { clientId, link: item.link });
+                          const url = `/api/export/pdf/article?clientId=${encodeURIComponent(clientId)}&link=${encodeURIComponent(item.link)}`;
+                          console.log('[PDF Export] Fetching:', url);
+                          const res = await fetch(url, { 
+                            cache: 'no-store',
+                            method: 'GET'
+                          });
+                          console.log('[PDF Export] Response status:', res.status, res.statusText);
+                          
+                          if (!res.ok) {
+                            const errorText = await res.text();
+                            console.error('[PDF Export] Error response:', errorText);
+                            try {
+                              const errorJson = JSON.parse(errorText);
+                              alert(`Failed to generate PDF: ${errorJson.error || errorText}`);
+                            } catch {
+                              alert(`Failed to generate PDF (${res.status}): ${errorText.substring(0, 100)}`);
+                            }
+                            return;
+                          }
+                          
+                          const contentType = res.headers.get('content-type');
+                          console.log('[PDF Export] Content-Type:', contentType);
+                          
+                          if (contentType && contentType.includes('application/pdf')) {
                             const blob = await res.blob();
+                            console.log('[PDF Export] Blob size:', blob.size);
                             const url = window.URL.createObjectURL(blob);
                             const a = document.createElement('a');
                             const safeTitle = (item.title || 'article').replace(/[^a-z0-9]/gi, '_').substring(0, 50);
@@ -209,16 +219,19 @@ export default function RightSidebar({ data }) {
                             a.href = url;
                             document.body.appendChild(a);
                             a.click();
-                            window.URL.revokeObjectURL(url);
-                            document.body.removeChild(a);
+                            setTimeout(() => {
+                              window.URL.revokeObjectURL(url);
+                              document.body.removeChild(a);
+                            }, 100);
+                            console.log('[PDF Export] Download started');
                           } else {
-                            const errorText = await res.text();
-                            console.error('PDF export error:', errorText);
-                            alert('Failed to generate PDF. Please try again.');
+                            const text = await res.text();
+                            console.error('[PDF Export] Unexpected content type:', contentType, text.substring(0, 200));
+                            alert('Server returned non-PDF content. Check console for details.');
                           }
                         } catch (err) {
-                          console.error('PDF export failed:', err);
-                          alert('Failed to generate PDF. Please try again.');
+                          console.error('[PDF Export] Exception:', err);
+                          alert(`Failed to generate PDF: ${err.message || 'Unknown error'}`);
                         }
                       }}
                       className="btn-ghost"

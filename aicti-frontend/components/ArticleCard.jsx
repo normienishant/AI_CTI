@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import Link from 'next/link';
 import { Bookmark, BookmarkCheck } from 'lucide-react';
 import { humanizeTitle } from '../utils/humanizeTitle';
@@ -111,12 +112,20 @@ export default function ArticleCard({ item }) {
 
   const { toggleSaved, isSaved } = useSavedBriefings();
   const isAlreadySaved = link !== '#' && isSaved(link);
-  const handleToggleSaved = async () => {
-    if (link === '#') {
-      console.warn('[ArticleCard] Cannot save: invalid link');
+  const [isToggling, setIsToggling] = useState(false);
+  
+  const handleToggleSaved = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (link === '#' || isToggling) {
+      console.warn('[ArticleCard] Cannot save: invalid link or already toggling');
       return;
     }
+    
+    setIsToggling(true);
     console.log('[ArticleCard] Toggling save for:', { link, title, isAlreadySaved });
+    
     try {
       await toggleSaved({
         ...item,
@@ -128,6 +137,9 @@ export default function ArticleCard({ item }) {
       console.log('[ArticleCard] Save toggled successfully');
     } catch (err) {
       console.error('[ArticleCard] Error toggling save:', err);
+      alert('Failed to save/unsave article. Please try again.');
+    } finally {
+      setIsToggling(false);
     }
   };
 
@@ -190,17 +202,19 @@ export default function ArticleCard({ item }) {
             type="button"
             className="btn-ghost"
             onClick={handleToggleSaved}
-            disabled={link === '#'}
+            disabled={link === '#' || isToggling}
             style={{ 
               display: 'inline-flex', 
               alignItems: 'center', 
               gap: 6,
               minWidth: '90px',
-              justifyContent: 'center'
+              justifyContent: 'center',
+              opacity: isToggling ? 0.6 : 1,
+              cursor: isToggling ? 'wait' : 'pointer'
             }}
           >
             {isAlreadySaved ? <BookmarkCheck size={16} /> : <Bookmark size={16} />}
-            {isAlreadySaved ? 'Saved' : 'Save'}
+            {isToggling ? '...' : (isAlreadySaved ? 'Saved' : 'Save')}
           </button>
           <Link 
             className="btn-primary" 

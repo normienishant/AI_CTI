@@ -997,14 +997,19 @@ def export_pdf_article(client_id: str, link: str):
                 # Clean HTML from description
                 import re
                 clean_desc = re.sub(r'<[^>]+>', '', description)
-                clean_desc = clean_desc.replace('&nbsp;', ' ').replace('&amp;', '&').replace('&quot;', '"')
+                clean_desc = clean_desc.replace('&nbsp;', ' ').replace('&amp;', '&').replace('&quot;', '"').replace('&#39;', "'")
+                # Escape special characters for reportlab
+                clean_desc = clean_desc.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
                 story.append(Paragraph(clean_desc[:1000] + ('...' if len(clean_desc) > 1000 else ''), normal_style))
 
             doc.build(story)
             buffer.seek(0)
+            pdf_content = buffer.read()
+            print(f"[export/pdf/article] Generated PDF, size: {len(pdf_content)} bytes")
             from fastapi.responses import Response
-            return Response(content=buffer.read(), media_type="application/pdf", headers={
-                "Content-Disposition": f'attachment; filename="ai-cti-article-{datetime.now().strftime("%Y-%m-%d")}.pdf"'
+            return Response(content=pdf_content, media_type="application/pdf", headers={
+                "Content-Disposition": f'attachment; filename="ai-cti-article-{datetime.now().strftime("%Y-%m-%d")}.pdf"',
+                "Content-Length": str(len(pdf_content))
             })
 
         except ImportError as import_err:
