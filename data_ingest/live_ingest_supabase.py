@@ -151,29 +151,63 @@ def _resolve_source_name(url: str, default: str) -> str:
 
 def _get_screenshot_url(article_url: str) -> Optional[str]:
     """Get screenshot URL using screenshot API service as fallback"""
+    if not article_url:
+        return None
+    
+    print(f"[screenshot] Attempting to get screenshot for: {article_url[:80]}")
+    
+    # Method 1: Try microlink.io screenshot API (free, no API key required)
     try:
-        # Use microlink.io screenshot API (free, no API key required)
-        screenshot_api = f"https://api.microlink.io/?url={requests.utils.quote(article_url)}&screenshot=true&viewport.width=1200&viewport.height=630"
-        resp = requests.get(screenshot_api, timeout=10, headers=HEADERS)
+        microlink_url = f"https://api.microlink.io/?url={requests.utils.quote(article_url)}&screenshot=true&viewport.width=1200&viewport.height=630"
+        print(f"[screenshot] Trying microlink.io: {microlink_url[:100]}")
+        resp = requests.get(microlink_url, timeout=15, headers=HEADERS)
         if resp.status_code == 200:
             data = resp.json()
             screenshot_url = data.get("data", {}).get("screenshot", {}).get("url")
-            if screenshot_url:
-                print(f"[screenshot] Got screenshot URL from microlink: {screenshot_url[:80]}")
-                return screenshot_url
+            if screenshot_url and screenshot_url.startswith("http"):
+                print(f"[screenshot] ✓ Got screenshot URL from microlink: {screenshot_url[:80]}")
+                # Verify the screenshot URL works
+                try:
+                    verify_resp = requests.head(screenshot_url, timeout=5, allow_redirects=True)
+                    if verify_resp.status_code == 200:
+                        return screenshot_url
+                    else:
+                        print(f"[screenshot] ✗ Screenshot URL returned {verify_resp.status_code}")
+                except Exception as verify_err:
+                    print(f"[screenshot] ✗ Could not verify screenshot URL: {verify_err}")
     except Exception as exc:
-        print(f"[screenshot] Failed to get screenshot: {exc}")
+        print(f"[screenshot] microlink.io failed: {exc}")
     
-    # Fallback: try screenshotapi.net (also free)
+    # Method 2: Try screenshotapi.net (free tier, but may require token)
     try:
-        screenshot_api2 = f"https://shot.screenshotapi.net/screenshot?token=free&url={requests.utils.quote(article_url)}&width=1200&height=630&output=image&file_type=png"
-        resp2 = requests.head(screenshot_api2, timeout=8, allow_redirects=True)
+        screenshot_api_key = os.getenv("SCREENSHOT_API_KEY", "free")
+        screenshot_api2 = f"https://shot.screenshotapi.net/screenshot?token={screenshot_api_key}&url={requests.utils.quote(article_url)}&width=1200&height=630&output=image&file_type=png"
+        print(f"[screenshot] Trying screenshotapi.net: {screenshot_api2[:100]}")
+        resp2 = requests.get(screenshot_api2, timeout=15, allow_redirects=True)
         if resp2.status_code == 200:
-            print(f"[screenshot] Got screenshot URL from screenshotapi: {screenshot_api2[:80]}")
-            return screenshot_api2
+            # screenshotapi.net returns the image directly or a redirect
+            final_url = resp2.url if resp2.url != screenshot_api2 else screenshot_api2
+            print(f"[screenshot] ✓ Got screenshot from screenshotapi.net: {final_url[:80]}")
+            return final_url
     except Exception as exc:
-        print(f"[screenshot] Fallback screenshot API also failed: {exc}")
+        print(f"[screenshot] screenshotapi.net failed: {exc}")
     
+    # Method 3: Try htmlcsstoimage.com (free tier available)
+    try:
+        htmlcsstoimage_api_key = os.getenv("HTMLCSSTOIMAGE_API_KEY")
+        if htmlcsstoimage_api_key:
+            htmlcss_url = f"https://hcti.io/v1/image?url={requests.utils.quote(article_url)}"
+            resp3 = requests.post(htmlcss_url, auth=(htmlcsstoimage_api_key, ''), timeout=15)
+            if resp3.status_code == 200:
+                data3 = resp3.json()
+                screenshot_url3 = data3.get("url")
+                if screenshot_url3:
+                    print(f"[screenshot] ✓ Got screenshot from htmlcsstoimage: {screenshot_url3[:80]}")
+                    return screenshot_url3
+    except Exception as exc:
+        print(f"[screenshot] htmlcsstoimage failed: {exc}")
+    
+    print(f"[screenshot] ✗ All screenshot services failed for {article_url[:60]}")
     return None
 
 

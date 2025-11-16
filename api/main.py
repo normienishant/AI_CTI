@@ -305,7 +305,9 @@ def results():
                     # Debug: log first few articles' image URLs
                     if len(feeds) < 3:
                         print(f"[api] Article '{row.get('title', '')[:50]}' image_url: {image_url[:100] if image_url else 'MISSING'}")
-                    feeds.append({
+                    
+                    # Create article object
+                    article = {
                         "title": row.get("title") or "",
                         "description": clean_text(row.get("description") or ""),
                         "link": row.get("link") or "",
@@ -315,12 +317,31 @@ def results():
                         "image_url": image_url,
                         "published_at": row.get("published_at"),
                         "fetched_at": row.get("fetched_at"),
-                    })
+                    }
+                    
+                    # Enrich with risk scoring
+                    try:
+                        enriched = enrich_article(article)
+                        feeds.append(enriched)
+                    except Exception as enrich_err:
+                        print(f"[api] Error enriching article: {enrich_err}")
+                        # Add without enrichment if it fails
+                        article["risk"] = {"level": "Low", "score": 5, "reasons": [], "sentiment": "watch", "tags": []}
+                        feeds.append(article)
+                
                 out["feeds"] = feeds
-                print(f"[api] Fetched {len(feeds)} articles from Supabase")
+                print(f"[api] Fetched and enriched {len(feeds)} articles from Supabase")
                 # Count how many have image_url
                 with_images = sum(1 for f in feeds if f.get("image_url") and f.get("image_url") != "")
                 print(f"[api] Articles with image_url: {with_images}/{len(feeds)}")
+                
+                # Log risk distribution for debugging
+                risk_counts = {"Critical": 0, "High": 0, "Medium": 0, "Low": 0}
+                for feed in feeds:
+                    risk_level = feed.get("risk", {}).get("level", "Low")
+                    if risk_level in risk_counts:
+                        risk_counts[risk_level] += 1
+                print(f"[api] Risk distribution: {risk_counts}")
             except Exception as supa_err:
                 print(f"[api] Supabase fetch failed: {supa_err}")
                 import traceback

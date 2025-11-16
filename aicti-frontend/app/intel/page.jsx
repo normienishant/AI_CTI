@@ -136,7 +136,12 @@ export default function IntelDesk() {
   );
   const topSources = useMemo(() => groupBySource(data.feeds), [data.feeds]);
   const timeline = useMemo(() => buildHourlyTimeline(data.feeds), [data.feeds]);
-  const riskBreakdown = useMemo(() => calcRiskBreakdown(data.feeds), [data.feeds]);
+  const riskBreakdown = useMemo(() => {
+    const breakdown = calcRiskBreakdown(data.feeds);
+    console.log('[Intel] Risk breakdown:', breakdown);
+    console.log('[Intel] Sample feed risk data:', data.feeds?.slice(0, 3).map(f => ({ title: f.title?.substring(0, 40), risk: f.risk })));
+    return breakdown;
+  }, [data.feeds]);
   const sentimentGauge = useMemo(() => calcSentimentGauge(data.feeds), [data.feeds]);
   const threatCount = sentimentGauge?.threat ?? 0;
   const watchCount = sentimentGauge?.watch ?? 0;
