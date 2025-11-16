@@ -880,6 +880,7 @@ def export_pdf(client_id: str):
 
         # Generate PDF using reportlab
         try:
+            import reportlab
             from reportlab.lib.pagesizes import letter, A4
             from reportlab.lib import colors
             from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -887,6 +888,7 @@ def export_pdf(client_id: str):
             from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
             from reportlab.lib.enums import TA_LEFT, TA_CENTER
             from io import BytesIO
+            print(f"[export/pdf] reportlab version: {reportlab.Version}")
 
             buffer = BytesIO()
             doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=0.5*inch, bottomMargin=0.5*inch)
@@ -961,15 +963,22 @@ def export_pdf(client_id: str):
                 "Content-Disposition": f'attachment; filename="ai-cti-briefings-{datetime.now().strftime("%Y-%m-%d")}.pdf"'
             })
 
-        except ImportError:
+        except ImportError as import_err:
             # Fallback: return JSON if reportlab not installed
-            print("[export/pdf] reportlab not installed, returning JSON")
-            return {
-                "items": items,
-                "generated_at": datetime.now().isoformat(),
-                "format": "json",
-                "note": "Install reportlab for PDF generation: pip install reportlab"
-            }
+            print(f"[export/pdf] reportlab not installed: {import_err}")
+            print("[export/pdf] Install reportlab: pip install reportlab")
+            raise HTTPException(
+                status_code=503,
+                detail="PDF generation requires reportlab. Install it: pip install reportlab"
+            )
+        except Exception as pdf_err:
+            print(f"[export/pdf] PDF generation error: {pdf_err}")
+            import traceback
+            traceback.print_exc()
+            raise HTTPException(
+                status_code=500,
+                detail=f"PDF generation failed: {str(pdf_err)}"
+            )
 
     except HTTPException:
         raise

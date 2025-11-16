@@ -233,17 +233,29 @@ export default function IntelDesk() {
         <section className="sidebar-card" style={{ display: 'grid', gap: 16 }}>
           <h2 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text-default)' }}>Risk distribution</h2>
           <div style={{ height: 240 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={riskBreakdown} margin={{ top: 12, right: 20, left: 0, bottom: 12 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.25)" />
-                <XAxis dataKey="level" stroke="var(--text-muted)" />
-                <YAxis allowDecimals={false} stroke="var(--text-muted)" />
-                <AreaTooltip
-                  contentStyle={{ background: 'var(--bg-card)', border: '1px solid var(--border-soft)' }}
-                  formatter={(value) => [`${value} headlines`, 'Risk']} />
-                <Bar dataKey="count" radius={[8, 8, 0, 0]} fill="#f97316" />
-              </BarChart>
-            </ResponsiveContainer>
+            {riskBreakdown && riskBreakdown.length > 0 && riskBreakdown.some(r => r.count > 0) ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={riskBreakdown} margin={{ top: 12, right: 20, left: 0, bottom: 12 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.25)" />
+                  <XAxis dataKey="level" stroke="var(--text-muted)" />
+                  <YAxis allowDecimals={false} stroke="var(--text-muted)" />
+                  <AreaTooltip
+                    contentStyle={{ background: 'var(--bg-card)', border: '1px solid var(--border-soft)', color: 'var(--text-default)' }}
+                    labelStyle={{ color: 'var(--text-default)' }}
+                    formatter={(value) => [`${value} headlines`, 'Risk']} />
+                  <Bar dataKey="count" radius={[8, 8, 0, 0]}>
+                    {riskBreakdown.map((entry, index) => {
+                      const colors = { Critical: '#dc2626', High: '#f97316', Medium: '#facc15', Low: '#16a34a' };
+                      return <Cell key={`cell-${index}`} fill={colors[entry.level] || '#6b7280'} />;
+                    })}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-muted)' }}>
+                No risk data available
+              </div>
+            )}
           </div>
         </section>
 

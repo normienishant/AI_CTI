@@ -421,33 +421,29 @@ def fetch_feeds_and_upload(limit_per_feed: int = 12) -> None:
             # Extract and upload thumbnail
             og_image = _extract_image_url(link)
             uploaded_url = None
-            screenshot_url = None
             
             if og_image:
                 print(f"[article] Extracted OG image: {og_image[:100]}")
                 uploaded_url = _upload_image_to_supabase(og_image)
                 if uploaded_url:
-                    print(f"[article] ✓ Using Supabase thumbnail: {uploaded_url[:100]}")
-                else:
-                    print(f"[article] ✗ Failed to upload thumbnail, using OG image: {og_image[:100]}")
-            else:
-                print(f"[article] ✗ No OG image found for: {title[:50]}..., trying screenshot service...")
-                # Try screenshot service as fallback
+                    print(f"[article] ✓ Uploaded OG image: {uploaded_url[:100]}")
+            
+            # If OG image failed, try screenshot service as fallback
+            if not uploaded_url:
+                print(f"[article] OG image not found/failed, trying screenshot service for {link[:60]}")
                 screenshot_url = _get_screenshot_url(link)
                 if screenshot_url:
                     print(f"[article] Got screenshot URL: {screenshot_url[:100]}")
                     uploaded_url = _upload_image_to_supabase(screenshot_url)
                     if uploaded_url:
-                        print(f"[article] ✓ Using screenshot thumbnail: {uploaded_url[:100]}")
-                    else:
-                        print(f"[article] ✗ Failed to upload screenshot, using screenshot URL directly")
+                        print(f"[article] ✓ Uploaded screenshot: {uploaded_url[:100]}")
             
-            # Prioritize Supabase URL, then OG image, then screenshot, then default
-            article["image_url"] = uploaded_url or og_image or screenshot_url or DEFAULT_IMAGE_URL
-            if not article["image_url"] or article["image_url"] == DEFAULT_IMAGE_URL:
-                print(f"[article] ⚠ No thumbnail for: {title[:50]}... (using default)")
+            if uploaded_url:
+                print(f"[article] ✓ Using Supabase thumbnail: {uploaded_url[:100]}")
+                article["image_url"] = uploaded_url
             else:
-                print(f"[article] ✓ Final image_url set: {article['image_url'][:100]}")
+                print(f"[article] ✗ Failed to upload thumbnail for: {title[:50]}...")
+                article["image_url"] = None
             
             collected.append(article)
 

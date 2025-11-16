@@ -191,15 +191,31 @@ export default function ArticleCard({ item }) {
             className="btn-ghost"
             onClick={handleToggleSaved}
             disabled={link === '#'}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            style={{ 
+              display: 'inline-flex', 
+              alignItems: 'center', 
+              gap: 6,
+              minWidth: '90px',
+              justifyContent: 'center'
+            }}
           >
             {isAlreadySaved ? <BookmarkCheck size={16} /> : <Bookmark size={16} />}
             {isAlreadySaved ? 'Saved' : 'Save'}
           </button>
-          <Link className="btn-primary" href={`/story?link=${encodedLink}`}>
+          <Link 
+            className="btn-primary" 
+            href={`/story?link=${encodedLink}`}
+            style={{ minWidth: '120px', justifyContent: 'center' }}
+          >
             View briefing
           </Link>
-          <a href={link} target="_blank" rel="noreferrer" className="btn-ghost">
+          <a 
+            href={link} 
+            target="_blank" 
+            rel="noreferrer" 
+            className="btn-ghost"
+            style={{ minWidth: '120px', justifyContent: 'center' }}
+          >
             Read original
           </a>
         </div>

@@ -260,6 +260,12 @@ a {
   color: #ffffff;
   cursor: pointer;
   transition: transform 0.16s ease, box-shadow 0.16s ease, opacity 0.16s ease;
+  white-space: nowrap;
+}
+
+.dark .btn-primary {
+  background: var(--accent);
+  color: #ffffff;
 }
 
 .btn-primary:hover {
@@ -274,17 +280,19 @@ a {
   gap: 6px;
   padding: 8px 14px;
   border-radius: 8px;
-  border: 1px solid var(--accent);
-  background: transparent;
-  color: var(--accent);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-card);
+  color: var(--text-default);
   font-weight: 600;
   cursor: pointer;
   transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+  white-space: nowrap;
 }
 
 .btn-ghost:hover {
   background: var(--accent-soft);
   border-color: var(--accent);
+  color: var(--accent);
 }
 
 .ticker-wrapper {
