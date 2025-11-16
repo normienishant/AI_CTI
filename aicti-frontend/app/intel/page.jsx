@@ -81,12 +81,18 @@ function buildHourlyTimeline(feeds = []) {
 function calcRiskBreakdown(feeds = []) {
   const bucket = { Critical: 0, High: 0, Medium: 0, Low: 0 };
   feeds.forEach((item) => {
-    const level = item?.risk?.level;
+    // Check multiple possible paths for risk data
+    const level = item?.risk?.level || item?.risk_level || null;
     if (level && bucket[level] !== undefined) {
       bucket[level] += 1;
+    } else if (!level) {
+      // If no risk level, count as Low
+      bucket.Low += 1;
     }
   });
-  return Object.entries(bucket).map(([level, count]) => ({ level, count }));
+  const result = Object.entries(bucket).map(([level, count]) => ({ level, count }));
+  console.log('[calcRiskBreakdown] Input feeds:', feeds.length, 'Result:', result);
+  return result;
 }
 
 function calcSentimentGauge(feeds = []) {

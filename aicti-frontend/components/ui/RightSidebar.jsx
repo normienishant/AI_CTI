@@ -181,49 +181,53 @@ export default function RightSidebar({ data }) {
       </section>
 
       <section className="sidebar-card">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <div style={{ fontWeight: 700, color: 'var(--text-default)' }}>Saved briefings</div>
-          {savedBriefings.length > 0 && (
-            <button
-              onClick={async () => {
-                if (!clientId) return;
-                try {
-                  const res = await fetch(`/api/export/pdf?clientId=${clientId}`);
-                  if (res.ok) {
-                    const blob = await res.blob();
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `ai-cti-briefings-${new Date().toISOString().split('T')[0]}.pdf`;
-                    document.body.appendChild(a);
-                    a.click();
-                    window.URL.revokeObjectURL(url);
-                    document.body.removeChild(a);
-                  } else {
-                    alert('Failed to generate PDF. Please try again.');
-                  }
-                } catch (err) {
-                  console.error('PDF export failed:', err);
-                  alert('Failed to generate PDF. Please try again.');
-                }
-              }}
-              className="btn-ghost"
-              style={{ fontSize: '0.75rem', padding: '4px 8px' }}
-            >
-              📄 Export PDF
-            </button>
-          )}
+        <div style={{ fontWeight: 700, color: 'var(--text-default)', marginBottom: 12 }}>
+          Saved briefings
         </div>
         {savedBriefings.length === 0 ? (
           <p className="small-muted">Use the bookmark icon on any headline to curate your personal list.</p>
         ) : (
           <>
-            <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 10 }}>
+            <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 12 }}>
               {savedBriefings.map((item) => (
-                <li key={item.link} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <Link href={`/story?link=${encodeURIComponent(item.link)}`} className="small-muted" style={{ fontWeight: 600 }}>
-                    {item.title || item.link}
-                  </Link>
+                <li key={item.link} style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '10px', background: 'var(--accent-soft)', borderRadius: '8px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                    <Link href={`/story?link=${encodeURIComponent(item.link)}`} className="small-muted" style={{ fontWeight: 600, flex: 1 }}>
+                      {item.title || item.link}
+                    </Link>
+                    <button
+                      onClick={async () => {
+                        if (!clientId || !item.link) return;
+                        try {
+                          const res = await fetch(`/api/export/pdf/article?clientId=${clientId}&link=${encodeURIComponent(item.link)}`);
+                          if (res.ok) {
+                            const blob = await res.blob();
+                            const url = window.URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            const safeTitle = (item.title || 'article').replace(/[^a-z0-9]/gi, '_').substring(0, 50);
+                            a.download = `ai-cti-${safeTitle}-${new Date().toISOString().split('T')[0]}.pdf`;
+                            a.href = url;
+                            document.body.appendChild(a);
+                            a.click();
+                            window.URL.revokeObjectURL(url);
+                            document.body.removeChild(a);
+                          } else {
+                            const errorText = await res.text();
+                            console.error('PDF export error:', errorText);
+                            alert('Failed to generate PDF. Please try again.');
+                          }
+                        } catch (err) {
+                          console.error('PDF export failed:', err);
+                          alert('Failed to generate PDF. Please try again.');
+                        }
+                      }}
+                      className="btn-ghost"
+                      style={{ fontSize: '0.7rem', padding: '4px 8px', whiteSpace: 'nowrap', flexShrink: 0 }}
+                      title="Export this article as PDF"
+                    >
+                      📄 PDF
+                    </button>
+                  </div>
                   <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
                     {item.source} • {item.risk_level || 'Unknown risk'}
                   </span>

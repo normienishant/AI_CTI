@@ -875,6 +875,162 @@ def delete_saved(client_id: str, link: str):
         raise HTTPException(status_code=500, detail="Failed to remove saved briefing")
 
 
+@app.get("/export/pdf/article")
+def export_pdf_article(client_id: str, link: str):
+    """Generate PDF for a single saved article"""
+    if not client_id or not link:
+        raise HTTPException(status_code=400, detail="client_id and link are required")
+
+    if not SUPABASE_ENABLED or not supabase_client:
+        raise HTTPException(status_code=503, detail="Supabase not configured")
+
+    try:
+        # Fetch the specific saved article
+        resp = (
+            supabase_client
+            .table(SAVED_TABLE)
+            .select("*")
+            .eq("client_id", client_id)
+            .eq("link", link)
+            .limit(1)
+            .execute()
+        )
+        items = resp.data or []
+
+        if not items:
+            raise HTTPException(status_code=404, detail="Article not found in saved briefings")
+
+        item = items[0]
+        
+        # Also try to get full article details from articles table
+        try:
+            article_resp = supabase_client.table("articles").select("*").eq("link", link).limit(1).execute()
+            if article_resp.data and len(article_resp.data) > 0:
+                article_data = article_resp.data[0]
+                # Merge article data with saved briefing data
+                item.update({
+                    "description": article_data.get("description") or item.get("description", ""),
+                    "published_at": article_data.get("published_at") or item.get("published_at"),
+                })
+        except Exception as article_err:
+            print(f"[export/pdf/article] Could not fetch article details: {article_err}")
+
+        # Generate PDF for single article
+        try:
+            import reportlab
+            from reportlab.lib.pagesizes import letter, A4
+            from reportlab.lib import colors
+            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            from reportlab.lib.units import inch
+            from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+            from reportlab.lib.enums import TA_LEFT, TA_CENTER
+            from io import BytesIO
+
+            buffer = BytesIO()
+            doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=0.5*inch, bottomMargin=0.5*inch)
+            story = []
+
+            styles = getSampleStyleSheet()
+            title_style = ParagraphStyle(
+                'CustomTitle',
+                parent=styles['Heading1'],
+                fontSize=20,
+                textColor=colors.HexColor('#1a1a1a'),
+                spaceAfter=20,
+                alignment=TA_LEFT
+            )
+            heading_style = ParagraphStyle(
+                'CustomHeading',
+                parent=styles['Heading2'],
+                fontSize=14,
+                textColor=colors.HexColor('#1a1a1a'),
+                spaceAfter=10,
+                spaceBefore=16
+            )
+            normal_style = ParagraphStyle(
+                'CustomNormal',
+                parent=styles['Normal'],
+                fontSize=11,
+                textColor=colors.HexColor('#4b5563'),
+                leading=16
+            )
+
+            # Title
+            story.append(Paragraph("AI-CTI Threat Intelligence Briefing", title_style))
+            story.append(Spacer(1, 0.1*inch))
+            story.append(Paragraph(f"Generated: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}", normal_style))
+            story.append(Spacer(1, 0.3*inch))
+
+            # Article title
+            story.append(Paragraph(item.get('title', 'Untitled'), heading_style))
+            story.append(Spacer(1, 0.1*inch))
+
+            # Article details
+            data = [
+                ['Source:', item.get('source', 'Unknown')],
+                ['Risk Level:', item.get('risk_level', 'Unknown')],
+                ['Published:', item.get('published_at', '')[:10] if item.get('published_at') else 'Unknown'],
+                ['Saved:', item.get('saved_at', '')[:10] if item.get('saved_at') else 'Unknown'],
+            ]
+            if item.get('link'):
+                data.append(['Link:', item.get('link', '')[:80] + '...' if len(item.get('link', '')) > 80 else item.get('link', '')])
+
+            table = Table(data, colWidths=[1.5*inch, 4.5*inch])
+            table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#f3f4f6')),
+                ('TEXTCOLOR', (0, 0), (-1, -1), colors.HexColor('#1a1a1a')),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+                ('FONTNAME', (1, 0), (1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 0), (-1, -1), 10),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+                ('TOPPADDING', (0, 0), (-1, -1), 8),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e5e7eb')),
+            ]))
+            story.append(table)
+            story.append(Spacer(1, 0.2*inch))
+
+            # Description
+            description = item.get('description', '')
+            if description:
+                story.append(Paragraph("<b>Description:</b>", heading_style))
+                # Clean HTML from description
+                import re
+                clean_desc = re.sub(r'<[^>]+>', '', description)
+                clean_desc = clean_desc.replace('&nbsp;', ' ').replace('&amp;', '&').replace('&quot;', '"')
+                story.append(Paragraph(clean_desc[:1000] + ('...' if len(clean_desc) > 1000 else ''), normal_style))
+
+            doc.build(story)
+            buffer.seek(0)
+            from fastapi.responses import Response
+            return Response(content=buffer.read(), media_type="application/pdf", headers={
+                "Content-Disposition": f'attachment; filename="ai-cti-article-{datetime.now().strftime("%Y-%m-%d")}.pdf"'
+            })
+
+        except ImportError as import_err:
+            print(f"[export/pdf/article] reportlab not installed: {import_err}")
+            raise HTTPException(
+                status_code=503,
+                detail="PDF generation requires reportlab. Install it: pip install reportlab"
+            )
+        except Exception as pdf_err:
+            print(f"[export/pdf/article] PDF generation error: {pdf_err}")
+            import traceback
+            traceback.print_exc()
+            raise HTTPException(
+                status_code=500,
+                detail=f"PDF generation failed: {str(pdf_err)}"
+            )
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        print(f"[export/pdf/article] Error: {exc}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to generate PDF: {str(exc)}")
+
+
 @app.get("/export/pdf")
 def export_pdf(client_id: str):
     """Generate PDF report of saved briefings"""
