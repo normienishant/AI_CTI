@@ -8,4 +8,5 @@ feedparser
 beautifulsoup4
 lxml
 apscheduler
+reportlab
 

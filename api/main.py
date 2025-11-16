@@ -455,6 +455,17 @@ def article(link: str):
 
         article_payload = enrich_article(article_payload)
         article_payload["highlights"] = build_article_highlights(article_payload)
+        
+        # Add AI features
+        article_payload["ai_summary"] = generate_ai_summary(
+            article_payload.get("description", "") or article_payload.get("title", "")
+        )
+        article_payload["ai_categories"] = auto_categorize_article(article_payload)
+        
+        # Get recommendations from all feeds
+        all_feeds = results().get("feeds", [])
+        article_payload["ai_recommendations"] = get_ai_recommendations(article_payload, all_feeds, limit=3)
+        
         return {"article": article_payload, "error": None}
 
     except HTTPException:
@@ -841,3 +852,237 @@ def delete_saved(client_id: str, link: str):
     except Exception as exc:
         print(f"[saved] delete failed: {exc}")
         raise HTTPException(status_code=500, detail="Failed to remove saved briefing")
+
+
+@app.get("/export/pdf")
+def export_pdf(client_id: str):
+    """Generate PDF report of saved briefings"""
+    if not client_id:
+        raise HTTPException(status_code=400, detail="client_id is required")
+
+    if not SUPABASE_ENABLED or not supabase_client:
+        raise HTTPException(status_code=503, detail="Supabase not configured")
+
+    try:
+        # Fetch saved briefings
+        resp = (
+            supabase_client
+            .table(SAVED_TABLE)
+            .select("*")
+            .eq("client_id", client_id)
+            .order("saved_at", desc=True)
+            .execute()
+        )
+        items = resp.data or []
+
+        if not items:
+            raise HTTPException(status_code=404, detail="No saved briefings found")
+
+        # Generate PDF using reportlab
+        try:
+            from reportlab.lib.pagesizes import letter, A4
+            from reportlab.lib import colors
+            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            from reportlab.lib.units import inch
+            from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+            from reportlab.lib.enums import TA_LEFT, TA_CENTER
+            from io import BytesIO
+
+            buffer = BytesIO()
+            doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=0.5*inch, bottomMargin=0.5*inch)
+            story = []
+
+            styles = getSampleStyleSheet()
+            title_style = ParagraphStyle(
+                'CustomTitle',
+                parent=styles['Heading1'],
+                fontSize=24,
+                textColor=colors.HexColor('#1a1a1a'),
+                spaceAfter=30,
+                alignment=TA_CENTER
+            )
+            heading_style = ParagraphStyle(
+                'CustomHeading',
+                parent=styles['Heading2'],
+                fontSize=16,
+                textColor=colors.HexColor('#1a1a1a'),
+                spaceAfter=12,
+                spaceBefore=20
+            )
+            normal_style = ParagraphStyle(
+                'CustomNormal',
+                parent=styles['Normal'],
+                fontSize=10,
+                textColor=colors.HexColor('#4b5563'),
+                leading=14
+            )
+
+            # Title
+            story.append(Paragraph("AI-CTI Threat Intelligence Briefing", title_style))
+            story.append(Spacer(1, 0.2*inch))
+            story.append(Paragraph(f"Generated: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}", normal_style))
+            story.append(Paragraph(f"Total Briefings: {len(items)}", normal_style))
+            story.append(Spacer(1, 0.3*inch))
+
+            # Add each briefing
+            for idx, item in enumerate(items, 1):
+                story.append(Paragraph(f"{idx}. {item.get('title', 'Untitled')}", heading_style))
+                
+                data = [
+                    ['Source:', item.get('source', 'Unknown')],
+                    ['Risk Level:', item.get('risk_level', 'Unknown')],
+                    ['Saved:', item.get('saved_at', '')[:10] if item.get('saved_at') else 'Unknown'],
+                ]
+                if item.get('link'):
+                    data.append(['Link:', item.get('link', '')[:80] + '...' if len(item.get('link', '')) > 80 else item.get('link', '')])
+
+                table = Table(data, colWidths=[1.5*inch, 4.5*inch])
+                table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#f3f4f6')),
+                    ('TEXTCOLOR', (0, 0), (-1, -1), colors.HexColor('#1a1a1a')),
+                    ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                    ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+                    ('FONTNAME', (1, 0), (1, -1), 'Helvetica'),
+                    ('FONTSIZE', (0, 0), (-1, -1), 9),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+                    ('TOPPADDING', (0, 0), (-1, -1), 8),
+                    ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e5e7eb')),
+                ]))
+                story.append(table)
+                story.append(Spacer(1, 0.2*inch))
+
+                if idx < len(items):
+                    story.append(PageBreak())
+
+            doc.build(story)
+            buffer.seek(0)
+            from fastapi.responses import Response
+            return Response(content=buffer.read(), media_type="application/pdf", headers={
+                "Content-Disposition": f'attachment; filename="ai-cti-briefings-{datetime.now().strftime("%Y-%m-%d")}.pdf"'
+            })
+
+        except ImportError:
+            # Fallback: return JSON if reportlab not installed
+            print("[export/pdf] reportlab not installed, returning JSON")
+            return {
+                "items": items,
+                "generated_at": datetime.now().isoformat(),
+                "format": "json",
+                "note": "Install reportlab for PDF generation: pip install reportlab"
+            }
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        print(f"[export/pdf] Error: {exc}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to generate PDF: {str(exc)}")
+
+
+def generate_ai_summary(text: str, max_length: int = 150) -> str:
+    """Generate AI-powered summary of article text"""
+    if not text or len(text) < 50:
+        return text or ""
+    
+    # Simple extractive summarization (can be replaced with LLM API)
+    sentences = text.split('. ')
+    if len(sentences) <= 2:
+        return text
+    
+    # Take first sentence and key sentences with important keywords
+    important_keywords = ['breach', 'attack', 'vulnerability', 'exploit', 'malware', 'ransomware', 'critical', 'zero-day']
+    key_sentences = [sentences[0]]
+    
+    for sentence in sentences[1:]:
+        if any(keyword in sentence.lower() for keyword in important_keywords):
+            key_sentences.append(sentence)
+            if len('. '.join(key_sentences)) > max_length:
+                break
+    
+    summary = '. '.join(key_sentences)
+    if len(summary) > max_length:
+        summary = summary[:max_length].rsplit(' ', 1)[0] + '...'
+    else:
+        summary += '.'
+    
+    return summary
+
+
+def get_ai_recommendations(current_article: dict, all_articles: list, limit: int = 3) -> list:
+    """Get AI-powered article recommendations"""
+    if not current_article or not all_articles:
+        return []
+    
+    current_title = (current_article.get('title') or '').lower()
+    current_desc = (current_article.get('description') or '').lower()
+    current_link = current_article.get('link', '')
+    
+    # Extract keywords from current article
+    keywords = set()
+    for word in (current_title + ' ' + current_desc).split():
+        word = word.lower().strip('.,!?;:()[]{}')
+        if len(word) > 4 and word not in ['that', 'this', 'with', 'from', 'have', 'been', 'were', 'their']:
+            keywords.add(word)
+    
+    # Score other articles by keyword overlap
+    scored = []
+    for article in all_articles:
+        if article.get('link') == current_link:
+            continue
+        
+        article_text = ((article.get('title') or '') + ' ' + (article.get('description') or '')).lower()
+        article_keywords = set(word.lower().strip('.,!?;:()[]{}') for word in article_text.split() if len(word) > 4)
+        
+        overlap = len(keywords & article_keywords)
+        if overlap > 0:
+            scored.append((overlap, article))
+    
+    # Sort by score and return top recommendations
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [article for _, article in scored[:limit]]
+
+
+def auto_categorize_article(article: dict) -> list:
+    """Auto-categorize article based on content"""
+    title = (article.get('title') or '').lower()
+    desc = (article.get('description') or '').lower()
+    text = title + ' ' + desc
+    
+    categories = []
+    
+    # Attack type categories
+    if any(word in text for word in ['ransomware', 'lockbit', 'blackcat', 'conti']):
+        categories.append('Ransomware')
+    if any(word in text for word in ['phishing', 'spear', 'email', 'credential']):
+        categories.append('Phishing')
+    if any(word in text for word in ['ddos', 'distributed denial']):
+        categories.append('DDoS')
+    if any(word in text for word in ['apt', 'nation-state', 'state-sponsored']):
+        categories.append('APT')
+    if any(word in text for word in ['malware', 'trojan', 'backdoor', 'rootkit']):
+        categories.append('Malware')
+    
+    # Vulnerability categories
+    if any(word in text for word in ['cve', 'vulnerability', 'exploit', 'patch']):
+        categories.append('Vulnerability')
+    if 'zero-day' in text:
+        categories.append('Zero-Day')
+    
+    # Impact categories
+    if any(word in text for word in ['breach', 'data leak', 'exposed', 'stolen']):
+        categories.append('Data Breach')
+    if any(word in text for word in ['critical', 'severe', 'urgent']):
+        categories.append('Critical')
+    
+    # Technology categories
+    if any(word in text for word in ['windows', 'microsoft', 'azure', 'office']):
+        categories.append('Microsoft')
+    if any(word in text for word in ['linux', 'ubuntu', 'debian', 'redhat']):
+        categories.append('Linux')
+    if any(word in text for word in ['cloud', 'aws', 'azure', 'gcp']):
+        categories.append('Cloud')
+    if any(word in text for word in ['iot', 'device', 'embedded']):
+        categories.append('IoT')
+    
+    return categories[:5]  # Return max 5 categories

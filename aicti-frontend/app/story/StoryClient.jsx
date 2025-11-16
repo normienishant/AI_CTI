@@ -157,6 +157,9 @@ export default function StoryClient({ initialArticle = null, linkParam: linkFrom
     highlights = [],
     risk = null,
     tags = [],
+    ai_summary = null,
+    ai_categories = [],
+    ai_recommendations = [],
   } = article;
   const cleanDescription = sanitizeCopy(description);
   const fallbackLogo = (() => {
@@ -198,19 +201,55 @@ export default function StoryClient({ initialArticle = null, linkParam: linkFrom
               {source || 'Unknown source'}
             </div>
             <h1 className="h1" style={{ fontSize: '2.25rem', marginBottom: 4 }}>{title}</h1>
+            {ai_summary && (
+              <div style={{ padding: '16px', background: 'var(--accent-soft)', borderRadius: '8px', marginBottom: '12px', borderLeft: '3px solid var(--accent)' }}>
+                <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)', marginBottom: '8px', fontWeight: 600 }}>
+                  🤖 AI Summary
+                </div>
+                <p style={{ margin: 0, color: 'var(--text-default)', fontSize: '0.95rem', lineHeight: 1.6 }}>
+                  {ai_summary}
+                </p>
+              </div>
+            )}
             <p className="small-muted" style={{ margin: 0, color: 'var(--text-subtle)', fontSize: '1rem' }}>
               {cleanDescription || 'No summary available for this article.'}
             </p>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-              <RiskBadge risk={risk} style={{ background: 'rgba(37, 99, 235, 0.12)' }} />
+              <RiskBadge risk={risk} style={{ background: 'var(--accent-soft)' }} />
               {risk && (
                 <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
                   Threat sentiment: <strong>{risk.sentiment}</strong> • Score {risk.score || '—'}
                 </span>
               )}
             </div>
+            {ai_categories.length > 0 && (
+              <div style={{ marginTop: '8px' }}>
+                <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)', marginBottom: '8px', fontWeight: 600 }}>
+                  🤖 AI Categories
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {ai_categories.map((cat) => (
+                    <span
+                      key={cat}
+                      style={{
+                        fontSize: '0.75rem',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.1em',
+                        background: 'var(--accent-soft)',
+                        color: 'var(--accent)',
+                        padding: '4px 10px',
+                        borderRadius: 999,
+                        fontWeight: 600,
+                      }}
+                    >
+                      {cat}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
             {tagDeck.length > 0 && (
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: ai_categories.length > 0 ? '12px' : '0' }}>
                 {tagDeck.map((tag) => (
                   <span
                     key={tag}
@@ -289,6 +328,28 @@ export default function StoryClient({ initialArticle = null, linkParam: linkFrom
             </div>
           </div>
         </div>
+
+        {ai_recommendations.length > 0 && (
+          <section className="sidebar-card" style={{ display: 'grid', gap: 18 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h2 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text-default)' }}>
+                🤖 AI Recommendations
+              </h2>
+            </div>
+            <div style={{ display: 'grid', gap: 12 }}>
+              {ai_recommendations.map((item) => (
+                <div key={item.link} style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '12px', background: 'var(--accent-soft)', borderRadius: '8px' }}>
+                  <Link className="small-muted" href={`/story?link=${encodeURIComponent(item.link)}`} style={{ fontWeight: 600, color: 'var(--text-default)' }}>
+                    {item.title}
+                  </Link>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                    {item.source} • {formatTimestamp(item.published_at || item.fetched_at)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {relatedItems.length > 0 && (
           <section className="sidebar-card" style={{ display: 'grid', gap: 18 }}>

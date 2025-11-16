@@ -91,7 +91,7 @@ export default function RightSidebar({ data }) {
   const iocSummary = useMemo(() => summariseIocs(data?.iocs), [data?.iocs]);
   const highRisk = useMemo(() => extractHighRiskHeadlines(feeds), [feeds]);
   const enrichedIocs = useMemo(() => (data?.iocs || []).slice(0, 5), [data?.iocs]);
-  const { saved, loading: savedLoading } = useSavedBriefings();
+  const { saved, loading: savedLoading, clientId } = useSavedBriefings();
   const savedBriefings = (saved || []).slice(0, 4);
   
   // Debug: log saved items
@@ -181,22 +181,61 @@ export default function RightSidebar({ data }) {
       </section>
 
       <section className="sidebar-card">
-        <div style={{ fontWeight: 700, marginBottom: 6, color: 'var(--text-default)' }}>Saved briefings</div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <div style={{ fontWeight: 700, color: 'var(--text-default)' }}>Saved briefings</div>
+          {savedBriefings.length > 0 && (
+            <button
+              onClick={async () => {
+                if (!clientId) return;
+                try {
+                  const res = await fetch(`/api/export/pdf?clientId=${clientId}`);
+                  if (res.ok) {
+                    const blob = await res.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `ai-cti-briefings-${new Date().toISOString().split('T')[0]}.pdf`;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                  } else {
+                    alert('Failed to generate PDF. Please try again.');
+                  }
+                } catch (err) {
+                  console.error('PDF export failed:', err);
+                  alert('Failed to generate PDF. Please try again.');
+                }
+              }}
+              className="btn-ghost"
+              style={{ fontSize: '0.75rem', padding: '4px 8px' }}
+            >
+              📄 Export PDF
+            </button>
+          )}
+        </div>
         {savedBriefings.length === 0 ? (
           <p className="small-muted">Use the bookmark icon on any headline to curate your personal list.</p>
         ) : (
-          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 10 }}>
-            {savedBriefings.map((item) => (
-              <li key={item.link} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <Link href={`/story?link=${encodeURIComponent(item.link)}`} className="small-muted" style={{ fontWeight: 600 }}>
-                  {item.title || item.link}
-                </Link>
-                <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                  {item.source} • {item.risk_level || 'Unknown risk'}
-                </span>
-              </li>
-            ))}
-          </ul>
+          <>
+            <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 10 }}>
+              {savedBriefings.map((item) => (
+                <li key={item.link} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <Link href={`/story?link=${encodeURIComponent(item.link)}`} className="small-muted" style={{ fontWeight: 600 }}>
+                    {item.title || item.link}
+                  </Link>
+                  <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                    {item.source} • {item.risk_level || 'Unknown risk'}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            {saved.length > 4 && (
+              <Link href="/saved" className="btn-ghost" style={{ marginTop: 12, fontSize: '0.85rem', justifyContent: 'center' }}>
+                View all ({saved.length}) →
+              </Link>
+            )}
+          </>
         )}
       </section>
 
