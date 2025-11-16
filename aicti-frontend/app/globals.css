@@ -252,8 +252,8 @@ a {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: var(--accent);
-  border: none;
+  background: #1a1a1a !important;
+  border: none !important;
   border-radius: 8px;
   padding: 8px 14px;
   font-weight: 600;
@@ -264,14 +264,15 @@ a {
 }
 
 .dark .btn-primary {
-  background: var(--accent);
+  background: #1a1a1a !important;
   color: #ffffff !important;
 }
 
 .btn-primary:hover {
   transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
-  opacity: 0.9;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+  opacity: 0.85;
+  background: #2a2a2a !important;
 }
 
 .btn-ghost {
@@ -280,19 +281,31 @@ a {
   gap: 6px;
   padding: 8px 14px;
   border-radius: 8px;
-  border: 1px solid var(--border-strong);
-  background: var(--bg-card);
-  color: var(--text-default) !important;
+  border: 1.5px solid #4b5563 !important;
+  background: transparent !important;
+  color: #1a1a1a !important;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+  transition: all 0.18s ease;
   white-space: nowrap;
 }
 
+.dark .btn-ghost {
+  border-color: #6b7280 !important;
+  color: #e5e5e5 !important;
+  background: transparent !important;
+}
+
 .btn-ghost:hover {
-  background: var(--accent-soft);
-  border-color: var(--accent);
-  color: var(--accent) !important;
+  background: rgba(26, 26, 26, 0.08) !important;
+  border-color: #1a1a1a !important;
+  color: #1a1a1a !important;
+}
+
+.dark .btn-ghost:hover {
+  background: rgba(229, 229, 229, 0.1) !important;
+  border-color: #e5e5e5 !important;
+  color: #e5e5e5 !important;
 }
 
 .ticker-wrapper {
