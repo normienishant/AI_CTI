@@ -111,14 +111,24 @@ export default function ArticleCard({ item }) {
 
   const { toggleSaved, isSaved } = useSavedBriefings();
   const isAlreadySaved = link !== '#' && isSaved(link);
-  const handleToggleSaved = () => {
-    toggleSaved({
-      ...item,
-      link,
-      title,
-      source,
-      image_url: image,
-    });
+  const handleToggleSaved = async () => {
+    if (link === '#') {
+      console.warn('[ArticleCard] Cannot save: invalid link');
+      return;
+    }
+    console.log('[ArticleCard] Toggling save for:', { link, title, isAlreadySaved });
+    try {
+      await toggleSaved({
+        ...item,
+        link,
+        title,
+        source,
+        image_url: image,
+      });
+      console.log('[ArticleCard] Save toggled successfully');
+    } catch (err) {
+      console.error('[ArticleCard] Error toggling save:', err);
+    }
   };
 
   const encodedLink = link ? encodeURIComponent(link) : '';

@@ -91,8 +91,13 @@ export default function RightSidebar({ data }) {
   const iocSummary = useMemo(() => summariseIocs(data?.iocs), [data?.iocs]);
   const highRisk = useMemo(() => extractHighRiskHeadlines(feeds), [feeds]);
   const enrichedIocs = useMemo(() => (data?.iocs || []).slice(0, 5), [data?.iocs]);
-  const { saved } = useSavedBriefings();
-  const savedBriefings = saved.slice(0, 4);
+  const { saved, loading: savedLoading } = useSavedBriefings();
+  const savedBriefings = (saved || []).slice(0, 4);
+  
+  // Debug: log saved items
+  if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+    console.log('[RightSidebar] Saved briefings:', savedBriefings.length, saved.length);
+  }
 
   return (
     <aside style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 16 }}>

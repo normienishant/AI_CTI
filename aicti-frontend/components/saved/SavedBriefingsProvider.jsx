@@ -89,20 +89,29 @@ export default function SavedBriefingsProvider({ children }) {
 
   const toggleSaved = useCallback(
     async (item) => {
-      if (!clientId || !item?.link) return;
+      if (!clientId || !item?.link) {
+        console.warn('[saved] Cannot save: missing clientId or link', { clientId, link: item?.link });
+        return;
+      }
       const alreadySaved = isSaved(item.link);
       const previous = [...saved];
       try {
         setError(null);
         if (alreadySaved) {
+          // Optimistic delete
           setSaved((prev) => {
             const next = prev.filter((entry) => entry.link !== item.link);
             persistSavedCache(next);
             return next;
           });
-          await fetch(`/api/saved?clientId=${clientId}&link=${encodeURIComponent(item.link)}`, {
+          const deleteRes = await fetch(`/api/saved?clientId=${clientId}&link=${encodeURIComponent(item.link)}`, {
             method: 'DELETE',
           });
+          if (!deleteRes.ok) {
+            throw new Error('Failed to delete briefing');
+          }
+          // Refetch to ensure consistency
+          await fetchSaved();
         } else {
           const payload = {
             client_id: clientId,
@@ -114,35 +123,51 @@ export default function SavedBriefingsProvider({ children }) {
             risk_score: item?.risk?.score,
             saved_at: new Date().toISOString(),
           };
+          console.log('[saved] Saving briefing:', { link: item.link, title: item.title });
+          
+          // Optimistic update
           setSaved((prev) => {
             const optimistic = [payload, ...prev.filter((entry) => entry.link !== item.link)].slice(0, 50);
             persistSavedCache(optimistic);
             return optimistic;
           });
+          
           const res = await fetch('/api/saved', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
           });
+          
           if (!res.ok) {
-            throw new Error('Failed to save briefing');
+            const errorText = await res.text();
+            console.error('[saved] Save failed:', res.status, errorText);
+            throw new Error(`Failed to save briefing: ${res.status} ${errorText}`);
           }
+          
           const json = await res.json();
+          console.log('[saved] Save response:', json);
+          
+          // Use response item if available, otherwise keep optimistic update
           if (json?.item) {
             setSaved((prev) => {
               const synced = [json.item, ...prev.filter((entry) => entry.link !== json.item.link)].slice(0, 50);
               persistSavedCache(synced);
               return synced;
             });
+          } else {
+            // If no item in response, refetch to get latest from server
+            await fetchSaved();
           }
         }
       } catch (err) {
+        console.error('[saved] Error in toggleSaved:', err);
         setError(err.message || 'Failed to update saved briefing.');
+        // Revert to previous state
         setSaved(previous);
         persistSavedCache(previous);
       }
     },
-    [clientId, isSaved, persistSavedCache, saved]
+    [clientId, isSaved, persistSavedCache, saved, fetchSaved]
   );
 
   useEffect(() => {
