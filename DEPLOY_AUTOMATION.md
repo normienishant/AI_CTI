@@ -1,4 +1,4 @@
-# 🚀 Deploy Automation - Automatic vs Manual
+
 
 ## ✅ **Automatic Deploy (Recommended)**
 

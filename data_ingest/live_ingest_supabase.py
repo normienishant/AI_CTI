@@ -242,17 +242,33 @@ def _extract_image_url(article_url: str) -> Optional[str]:
 def _get_public_url(client, key: str) -> Optional[str]:
     """Get public URL from Supabase storage bucket."""
     try:
+        # Clean key - remove any leading slashes or subdirectories
+        clean_key = key.lstrip("/").split("/")[-1]  # Get just filename
+        
         # Method 1: Try the get_public_url method
         try:
-            result = client.get_public_url(key)
+            result = client.get_public_url(clean_key)
             if isinstance(result, dict):
                 url = result.get("publicUrl") or result.get("publicURL") or result.get("public_url")
                 if url and url.startswith("http"):
                     print(f"[image] Got public URL from API: {url[:80]}")
-                    return url
+                    # Verify URL works
+                    try:
+                        test_resp = requests.head(url, timeout=5, allow_redirects=True)
+                        if test_resp.status_code == 200:
+                            return url
+                        else:
+                            print(f"[image] API URL returned {test_resp.status_code}, trying manual construction")
+                    except:
+                        print(f"[image] Could not verify API URL, trying manual construction")
             if isinstance(result, str) and result.startswith("http"):
                 print(f"[image] Got public URL from API (string): {result[:80]}")
-                return result
+                try:
+                    test_resp = requests.head(result, timeout=5, allow_redirects=True)
+                    if test_resp.status_code == 200:
+                        return result
+                except:
+                    pass
         except Exception as api_exc:
             print(f"[image] get_public_url API method failed: {api_exc}")
         
@@ -261,12 +277,21 @@ def _get_public_url(client, key: str) -> Optional[str]:
         supabase_url = os.getenv("SUPABASE_URL", "").rstrip("/")
         if supabase_url and SUPABASE_IMAGE_BUCKET:
             try:
-                from urllib.parse import urlparse, quote
-                parsed = urlparse(supabase_url)
+                from urllib.parse import quote
                 # URL encode the key in case it has special characters
-                encoded_key = quote(key, safe='/')
+                encoded_key = quote(clean_key, safe='')
                 public_url = f"{supabase_url}/storage/v1/object/public/{SUPABASE_IMAGE_BUCKET}/{encoded_key}"
                 print(f"[image] Constructed public URL: {public_url[:80]}")
+                # Verify it works
+                try:
+                    test_resp = requests.head(public_url, timeout=5, allow_redirects=True)
+                    if test_resp.status_code == 200:
+                        return public_url
+                    else:
+                        print(f"[image] Manual URL returned {test_resp.status_code}")
+                except Exception as verify_err:
+                    print(f"[image] Could not verify manual URL: {verify_err}")
+                # Return anyway - might work on frontend
                 return public_url
             except Exception as const_exc:
                 print(f"[image] URL construction failed: {const_exc}")
@@ -275,6 +300,8 @@ def _get_public_url(client, key: str) -> Optional[str]:
         return None
     except Exception as exc:
         print(f"[image] get_public_url failed for {key}: {exc}")
+        import traceback
+        traceback.print_exc()
         return None
 
 
@@ -313,68 +340,121 @@ def _upload_image_to_supabase(image_url: str) -> Optional[str]:
             except Exception as verify_err:
                 print(f"[image] ✗ Could not verify existing URL ({verify_err}), will re-upload")
 
-    try:
-        resp = requests.get(image_url, timeout=12, headers=HEADERS, stream=True)
-        resp.raise_for_status()
-        content = resp.content
-    except Exception as exc:
-        print(f"[image] download failed for {image_url}: {exc}")
+    # Download image with retry
+    content = None
+    content_type = "image/jpeg"
+    for attempt in range(2):
+        try:
+            resp = requests.get(image_url, timeout=15, headers=HEADERS, stream=True, allow_redirects=True)
+            resp.raise_for_status()
+            content = resp.content
+            content_type = resp.headers.get("Content-Type", "image/jpeg").split(";")[0]
+            if len(content) < 100:  # Too small, might be error page
+                print(f"[image] Downloaded content too small ({len(content)} bytes), retrying...")
+                if attempt == 0:
+                    continue
+            break
+        except Exception as exc:
+            print(f"[image] download failed (attempt {attempt+1}/2) for {image_url}: {exc}")
+            if attempt == 1:
+                return None
+            import time
+            time.sleep(1)
+    
+    if not content:
+        print(f"[image] Failed to download image content")
         return None
 
-    content_type = resp.headers.get("Content-Type", "image/jpeg").split(";")[0]
     extension = mimetypes.guess_extension(content_type) or ".jpg"
+    # Ensure clean key with no subdirectories
     key_with_ext = f"{file_hash}{extension}"
 
     try:
         buffer = io.BytesIO(content)
-        metadata = {"content-type": content_type}
+        metadata = {"content-type": content_type, "cache-control": "public, max-age=31536000"}
         # Try to upload, but if file exists, that's okay - we'll use existing
         try:
-            image_storage.upload(key_with_ext, buffer, metadata)
-            print(f"[image] Uploaded new thumbnail: {key_with_ext}")
+            image_storage.upload(key_with_ext, buffer, metadata, file_options={"upsert": "true"})
+            print(f"[image] ✓ Uploaded new thumbnail: {key_with_ext} ({len(content)} bytes)")
         except Exception as upload_exc:
             # File might already exist - that's fine, we'll use the existing one
-            if "already exists" in str(upload_exc).lower() or "duplicate" in str(upload_exc).lower():
+            error_str = str(upload_exc).lower()
+            if any(term in error_str for term in ["already exists", "duplicate", "409", "conflict"]):
                 print(f"[image] Thumbnail already exists: {key_with_ext}, using existing")
             else:
-                raise upload_exc
+                print(f"[image] Upload error (non-duplicate): {upload_exc}")
+                # Try once more with upsert
+                try:
+                    buffer.seek(0)
+                    image_storage.upload(key_with_ext, buffer, metadata, file_options={"upsert": "true"})
+                    print(f"[image] ✓ Uploaded with upsert: {key_with_ext}")
+                except Exception as retry_exc:
+                    print(f"[image] ✗ Upload retry also failed: {retry_exc}")
+                    raise upload_exc
     except Exception as exc:
         print(f"[supabase:image] upload failed for {image_url}: {exc}")
+        import traceback
+        traceback.print_exc()
 
     # Always try to get public URL (works for both new uploads and existing files)
+    # Wait a moment for Supabase to process the upload
+    import time
+    time.sleep(0.5)
+    
     try:
         public_url = _get_public_url(image_storage, key_with_ext)
         if public_url:
             # Verify the URL actually works before returning it
-            try:
-                verify_resp = requests.head(public_url, timeout=5, allow_redirects=True)
-                if verify_resp.status_code == 200:
-                    print(f"[image] ✓ Public URL verified and working: {public_url[:80]}")
-                    return public_url
-                else:
-                    print(f"[image] ✗ Public URL returned {verify_resp.status_code}, trying manual construction")
-                    # Try to construct URL manually without any subdirectories
-                    supabase_url = os.getenv("SUPABASE_URL", "").rstrip("/")
-                    if supabase_url:
-                        # Remove any subdirectory from key (like "6/")
-                        clean_key = key_with_ext.lstrip("/").split("/")[-1]  # Get just filename
-                        manual_url = f"{supabase_url}/storage/v1/object/public/{SUPABASE_IMAGE_BUCKET}/{clean_key}"
-                        print(f"[image] Trying clean manual URL: {manual_url[:80]}")
-                        manual_resp = requests.head(manual_url, timeout=5)
-                        if manual_resp.status_code == 200:
-                            print(f"[image] ✓ Clean URL works: {manual_url[:80]}")
-                            return manual_url
-                    print(f"[image] ✗ All URL attempts failed for {key_with_ext}")
-                    return None
-            except Exception as verify_exc:
-                print(f"[image] Could not verify URL: {verify_exc}, returning anyway")
-                # Return URL anyway, let frontend handle it
-                return public_url
+            for verify_attempt in range(2):
+                try:
+                    verify_resp = requests.head(public_url, timeout=8, allow_redirects=True)
+                    if verify_resp.status_code == 200:
+                        print(f"[image] ✓ Public URL verified and working: {public_url[:80]}")
+                        return public_url
+                    elif verify_resp.status_code == 404 and verify_attempt == 0:
+                        # Might need a moment for Supabase to make it public
+                        print(f"[image] URL returned 404, waiting 1s and retrying...")
+                        time.sleep(1)
+                        continue
+                    else:
+                        print(f"[image] ✗ Public URL returned {verify_resp.status_code}")
+                        break
+                except Exception as verify_exc:
+                    if verify_attempt == 0:
+                        print(f"[image] Verification error, retrying: {verify_exc}")
+                        time.sleep(1)
+                        continue
+                    else:
+                        print(f"[image] Could not verify URL after retry: {verify_exc}")
+                        # Return URL anyway, let frontend handle it
+                        return public_url
+            
+            # If verification failed, try manual construction as last resort
+            supabase_url = os.getenv("SUPABASE_URL", "").rstrip("/")
+            if supabase_url:
+                from urllib.parse import quote
+                clean_key = key_with_ext.lstrip("/").split("/")[-1]
+                encoded_key = quote(clean_key, safe='')
+                manual_url = f"{supabase_url}/storage/v1/object/public/{SUPABASE_IMAGE_BUCKET}/{encoded_key}"
+                print(f"[image] Trying final manual URL: {manual_url[:80]}")
+                try:
+                    manual_resp = requests.head(manual_url, timeout=8, allow_redirects=True)
+                    if manual_resp.status_code == 200:
+                        print(f"[image] ✓ Manual URL works: {manual_url[:80]}")
+                        return manual_url
+                except:
+                    pass
+            
+            # Return the URL anyway - might work on frontend even if HEAD fails
+            print(f"[image] Returning URL despite verification issues: {public_url[:80]}")
+            return public_url
         else:
             print(f"[image] WARNING: Failed to get public URL for {key_with_ext}")
             return None
     except Exception as exc:
         print(f"[supabase:image] public url failed: {exc}")
+        import traceback
+        traceback.print_exc()
         return None
 
 

@@ -878,14 +878,19 @@ def delete_saved(client_id: str, link: str):
 @app.get("/export/pdf/article")
 def export_pdf_article(client_id: str, link: str):
     """Generate PDF for a single saved article"""
+    print(f"[export/pdf/article] Request received: client_id={client_id[:20] if client_id else None}, link={link[:60] if link else None}")
+    
     if not client_id or not link:
+        print("[export/pdf/article] Missing required parameters")
         raise HTTPException(status_code=400, detail="client_id and link are required")
 
     if not SUPABASE_ENABLED or not supabase_client:
+        print("[export/pdf/article] Supabase not configured")
         raise HTTPException(status_code=503, detail="Supabase not configured")
 
     try:
         # Fetch the specific saved article
+        print(f"[export/pdf/article] Fetching saved article from {SAVED_TABLE}")
         resp = (
             supabase_client
             .table(SAVED_TABLE)
@@ -896,11 +901,14 @@ def export_pdf_article(client_id: str, link: str):
             .execute()
         )
         items = resp.data or []
+        print(f"[export/pdf/article] Found {len(items)} saved article(s)")
 
         if not items:
+            print(f"[export/pdf/article] Article not found for client_id={client_id[:20]}, link={link[:60]}")
             raise HTTPException(status_code=404, detail="Article not found in saved briefings")
 
         item = items[0]
+        print(f"[export/pdf/article] Article found: {item.get('title', 'Untitled')[:50]}")
         
         # Also try to get full article details from articles table
         try:
@@ -917,7 +925,9 @@ def export_pdf_article(client_id: str, link: str):
 
         # Generate PDF for single article
         try:
+            print("[export/pdf/article] Attempting to import reportlab...")
             import reportlab
+            print(f"[export/pdf/article] reportlab version: {reportlab.Version}")
             from reportlab.lib.pagesizes import letter, A4
             from reportlab.lib import colors
             from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -925,6 +935,7 @@ def export_pdf_article(client_id: str, link: str):
             from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
             from reportlab.lib.enums import TA_LEFT, TA_CENTER
             from io import BytesIO
+            print("[export/pdf/article] reportlab imported successfully")
 
             buffer = BytesIO()
             doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=0.5*inch, bottomMargin=0.5*inch)
@@ -1002,14 +1013,21 @@ def export_pdf_article(client_id: str, link: str):
                 clean_desc = clean_desc.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
                 story.append(Paragraph(clean_desc[:1000] + ('...' if len(clean_desc) > 1000 else ''), normal_style))
 
+            print("[export/pdf/article] Building PDF document...")
             doc.build(story)
             buffer.seek(0)
             pdf_content = buffer.read()
-            print(f"[export/pdf/article] Generated PDF, size: {len(pdf_content)} bytes")
+            print(f"[export/pdf/article] ✓ Generated PDF successfully, size: {len(pdf_content)} bytes")
+            
+            if len(pdf_content) == 0:
+                print("[export/pdf/article] ERROR: PDF content is empty!")
+                raise HTTPException(status_code=500, detail="Generated PDF is empty")
+            
             from fastapi.responses import Response
             return Response(content=pdf_content, media_type="application/pdf", headers={
                 "Content-Disposition": f'attachment; filename="ai-cti-article-{datetime.now().strftime("%Y-%m-%d")}.pdf"',
-                "Content-Length": str(len(pdf_content))
+                "Content-Length": str(len(pdf_content)),
+                "Cache-Control": "no-cache"
             })
 
         except ImportError as import_err:
