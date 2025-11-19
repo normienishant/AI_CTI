@@ -102,11 +102,17 @@ export default function ArticleCard({ item }) {
   const tags = Array.isArray(item?.tags) ? item.tags.slice(0, 4) : [];
 
 
+  // Enhanced debug logging for thumbnails
   if (process.env.NODE_ENV === 'development') {
     if (!item?.image_url && !item?.image) {
-      console.log('[ArticleCard] No image_url for:', title.substring(0, 50), '| item keys:', Object.keys(item));
+      console.warn('[ArticleCard] ⚠️ No image_url for:', title.substring(0, 50));
+      console.warn('[ArticleCard] Available keys:', Object.keys(item));
     } else if (image && image !== FALLBACK_IMAGE) {
-      console.log('[ArticleCard] Using image:', image.substring(0, 80), 'for:', title.substring(0, 50));
+      console.log('[ArticleCard] ✓ Using image:', image.substring(0, 80), 'for:', title.substring(0, 50));
+      // Check if it's a Supabase URL
+      if (image.includes('supabase.co/storage')) {
+        console.log('[ArticleCard] → Supabase storage URL detected');
+      }
     }
   }
 
@@ -160,12 +166,21 @@ export default function ArticleCard({ item }) {
             backgroundColor: 'var(--bg-card)'
           }}
           onError={(event) => {
-            console.log('[ArticleCard] Image failed to load:', image);
+            console.error('[ArticleCard] ❌ Image failed to load:', image);
+            console.error('[ArticleCard] Error details:', {
+              src: event.currentTarget.src,
+              naturalWidth: event.currentTarget.naturalWidth,
+              naturalHeight: event.currentTarget.naturalHeight,
+            });
+            // Try to get more info about the error
+            if (image && image.includes('supabase')) {
+              console.error('[ArticleCard] Supabase URL failed - check if bucket is public!');
+            }
             event.currentTarget.src = FALLBACK_IMAGE;
           }}
           onLoad={() => {
             if (image && image !== FALLBACK_IMAGE) {
-              console.log('[ArticleCard] Image loaded successfully:', image.substring(0, 80));
+              console.log('[ArticleCard] ✅ Image loaded successfully:', image.substring(0, 80));
             }
           }}
         />

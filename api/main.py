@@ -301,20 +301,37 @@ def results():
                 articles_list = unique_articles[:40]  # Take top 40 unique entries
                 feeds = []
                 for row in articles_list:
-                    image_url = row.get("image_url") or ""
+                    # Get image_url - handle None, empty string, and missing key
+                    image_url = row.get("image_url")
+                    if image_url is None:
+                        image_url = ""
+                    elif not isinstance(image_url, str):
+                        image_url = str(image_url) if image_url else ""
+                    image_url = image_url.strip()
+                    
                     # Debug: log first few articles' image URLs
                     if len(feeds) < 3:
-                        print(f"[api] Article '{row.get('title', '')[:50]}' image_url: {image_url[:100] if image_url else 'MISSING'}")
+                        print(f"[api/results] Article '{row.get('title', '')[:50]}'")
+                        print(f"[api/results]   image_url from DB (raw): {repr(row.get('image_url'))}")
+                        print(f"[api/results]   image_url (processed): {image_url[:150] if image_url else 'EMPTY/NULL'}")
+                        if image_url:
+                            # Test if URL is accessible
+                            try:
+                                import requests
+                                test_resp = requests.head(image_url, timeout=5, allow_redirects=True)
+                                print(f"[api/results]   URL accessibility: {test_resp.status_code}")
+                            except Exception as test_err:
+                                print(f"[api/results]   URL test error: {test_err}")
                     
-                    # Create article object
+                    # Create article object - always include image_url even if empty
                     article = {
                         "title": row.get("title") or "",
                         "description": clean_text(row.get("description") or ""),
                         "link": row.get("link") or "",
                         "source": row.get("source_name") or row.get("source") or "Unknown",
                         "raw_source": row.get("source") or "",
-                        "image": image_url,
-                        "image_url": image_url,
+                        "image": image_url,  # Set to empty string if None
+                        "image_url": image_url,  # Set to empty string if None
                         "published_at": row.get("published_at"),
                         "fetched_at": row.get("fetched_at"),
                     }
@@ -334,6 +351,22 @@ def results():
                 # Count how many have image_url
                 with_images = sum(1 for f in feeds if f.get("image_url") and f.get("image_url") != "")
                 print(f"[api] Articles with image_url: {with_images}/{len(feeds)}")
+                
+                # Detailed logging for first 5 articles
+                print(f"[api] === DETAILED IMAGE URL DEBUG ===")
+                for i, feed in enumerate(feeds[:5], 1):
+                    img_url = feed.get("image_url") or feed.get("image") or "NONE"
+                    print(f"[api] Article {i}: '{feed.get('title', '')[:40]}'")
+                    print(f"[api]   image_url: {img_url[:120] if img_url != 'NONE' else 'NONE'}")
+                    print(f"[api]   image: {feed.get('image', 'NONE')[:120] if feed.get('image') else 'NONE'}")
+                    if img_url and img_url != "NONE":
+                        # Test URL
+                        try:
+                            test_resp = requests.head(img_url, timeout=3, allow_redirects=True)
+                            print(f"[api]   URL test: {test_resp.status_code}")
+                        except:
+                            print(f"[api]   URL test: FAILED")
+                print(f"[api] === END DEBUG ===")
                 
                 # Log risk distribution for debugging
                 risk_counts = {"Critical": 0, "High": 0, "Medium": 0, "Low": 0}
