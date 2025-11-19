@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Bookmark, BookmarkCheck } from 'lucide-react';
 import { humanizeTitle } from '../utils/humanizeTitle';
@@ -102,19 +102,24 @@ export default function ArticleCard({ item }) {
   const tags = Array.isArray(item?.tags) ? item.tags.slice(0, 4) : [];
 
 
-  // Enhanced debug logging for thumbnails
-  if (process.env.NODE_ENV === 'development') {
+  // Enhanced debug logging for thumbnails - ALWAYS LOG
+  useEffect(() => {
     if (!item?.image_url && !item?.image) {
       console.warn('[ArticleCard] ⚠️ No image_url for:', title.substring(0, 50));
       console.warn('[ArticleCard] Available keys:', Object.keys(item));
+      console.warn('[ArticleCard] Full item:', JSON.stringify(item, null, 2));
     } else if (image && image !== FALLBACK_IMAGE) {
       console.log('[ArticleCard] ✓ Using image:', image.substring(0, 80), 'for:', title.substring(0, 50));
       // Check if it's a Supabase URL
       if (image.includes('supabase.co/storage')) {
         console.log('[ArticleCard] → Supabase storage URL detected');
       }
+    } else {
+      console.warn('[ArticleCard] ⚠️ Using FALLBACK_IMAGE for:', title.substring(0, 50));
+      console.warn('[ArticleCard] item.image_url:', item?.image_url);
+      console.warn('[ArticleCard] item.image:', item?.image);
     }
-  }
+  }, [item, image, title]);
 
   const { toggleSaved, isSaved } = useSavedBriefings();
   const isAlreadySaved = link !== '#' && isSaved(link);

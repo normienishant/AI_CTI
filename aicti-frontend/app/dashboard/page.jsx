@@ -33,6 +33,20 @@ export default function Dashboard() {
         if (json.error) {
           setError(json.error);
         }
+        // Debug: Log image URLs in received data
+        console.log('[Dashboard] Received feeds:', json.feeds?.length || 0);
+        if (json.feeds && json.feeds.length > 0) {
+          const withImages = json.feeds.filter(f => f.image_url || f.image).length;
+          console.log('[Dashboard] Feeds with images:', withImages, '/', json.feeds.length);
+          // Log first 3 articles' image data
+          json.feeds.slice(0, 3).forEach((feed, idx) => {
+            console.log(`[Dashboard] Article ${idx + 1}:`, {
+              title: feed.title?.substring(0, 50),
+              image_url: feed.image_url || 'MISSING',
+              image: feed.image || 'MISSING',
+            });
+          });
+        }
         setData(json);
         setLastRefreshedAt(new Date().toISOString());
       } catch (err) {
