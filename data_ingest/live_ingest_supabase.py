@@ -603,25 +603,41 @@ def fetch_feeds_and_upload(limit_per_feed: int = 12) -> None:
                 "fetched_at": datetime.now(tz=timezone.utc).isoformat(),
             }
 
-            # Extract and upload thumbnail
-            og_image = _extract_image_url(link)
+            # Extract and upload thumbnail - ALWAYS try to get an image
             uploaded_url = None
+            print(f"[article] Processing thumbnail for: {title[:50]}...")
             
-            if og_image:
-                print(f"[article] Extracted OG image: {og_image[:100]}")
-                uploaded_url = _upload_image_to_supabase(og_image)
-                if uploaded_url:
-                    print(f"[article] ✓ Uploaded OG image: {uploaded_url[:100]}")
-            
-            # If OG image failed, try screenshot service as fallback
-            if not uploaded_url:
-                print(f"[article] OG image not found/failed, trying screenshot service for {link[:60]}")
-                screenshot_url = _get_screenshot_url(link)
-                if screenshot_url:
-                    print(f"[article] Got screenshot URL: {screenshot_url[:100]}")
-                    uploaded_url = _upload_image_to_supabase(screenshot_url)
+            # Method 1: Try OG image extraction
+            try:
+                og_image = _extract_image_url(link)
+                if og_image:
+                    print(f"[article] Extracted OG image: {og_image[:100]}")
+                    uploaded_url = _upload_image_to_supabase(og_image)
                     if uploaded_url:
-                        print(f"[article] ✓ Uploaded screenshot: {uploaded_url[:100]}")
+                        print(f"[article] ✓✓✓ Uploaded OG image: {uploaded_url[:100]}")
+                    else:
+                        print(f"[article] ✗ OG image upload failed, trying screenshot...")
+                else:
+                    print(f"[article] ✗ No OG image found, trying screenshot...")
+            except Exception as og_err:
+                print(f"[article] ✗ OG extraction error: {og_err}, trying screenshot...")
+            
+            # Method 2: If OG image failed, try screenshot service as fallback
+            if not uploaded_url:
+                try:
+                    print(f"[article] Attempting screenshot service for {link[:60]}")
+                    screenshot_url = _get_screenshot_url(link)
+                    if screenshot_url:
+                        print(f"[article] Got screenshot URL: {screenshot_url[:100]}")
+                        uploaded_url = _upload_image_to_supabase(screenshot_url)
+                        if uploaded_url:
+                            print(f"[article] ✓✓✓ Uploaded screenshot: {uploaded_url[:100]}")
+                        else:
+                            print(f"[article] ✗ Screenshot upload failed")
+                    else:
+                        print(f"[article] ✗ Screenshot service returned no URL")
+                except Exception as screenshot_err:
+                    print(f"[article] ✗ Screenshot service error: {screenshot_err}")
             
             if uploaded_url:
                 # CRITICAL: Verify the URL works before saving
@@ -665,9 +681,10 @@ def fetch_feeds_and_upload(limit_per_feed: int = 12) -> None:
                 
                 # Always save the URL if we have one (even if verification failed)
                 article["image_url"] = final_url
-                print(f"[article] ✓ Saved image_url: {final_url[:100]}")
+                print(f"[article] ✓✓✓ FINAL: Saved image_url: {final_url[:100]}")
             else:
-                print(f"[article] ✗ Failed to upload thumbnail for: {title[:50]}...")
+                print(f"[article] ✗✗✗ FAILED: No thumbnail for: {title[:50]}...")
+                print(f"[article]   Link: {link[:80]}")
                 # Don't set to None - use empty string or omit the field
                 article["image_url"] = ""  # Empty string instead of None
             
