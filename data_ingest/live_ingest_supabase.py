@@ -607,20 +607,54 @@ def fetch_feeds_and_upload(limit_per_feed: int = 12) -> None:
             uploaded_url = None
             print(f"[article] Processing thumbnail for: {title[:50]}...")
             
-            # Method 1: Try OG image extraction
+            # Method 0: Try RSS feed entry image first (fastest, most reliable)
             try:
-                og_image = _extract_image_url(link)
-                if og_image:
-                    print(f"[article] Extracted OG image: {og_image[:100]}")
-                    uploaded_url = _upload_image_to_supabase(og_image)
-                    if uploaded_url:
-                        print(f"[article] ✓✓✓ Uploaded OG image: {uploaded_url[:100]}")
+                # Check if RSS entry has media:thumbnail or media:content
+                media_thumbnail = entry.get("media_thumbnail") or entry.get("media_content")
+                if media_thumbnail:
+                    if isinstance(media_thumbnail, list) and len(media_thumbnail) > 0:
+                        rss_image_url = media_thumbnail[0].get("url") or media_thumbnail[0].get("href")
+                    elif isinstance(media_thumbnail, dict):
+                        rss_image_url = media_thumbnail.get("url") or media_thumbnail.get("href")
                     else:
-                        print(f"[article] ✗ OG image upload failed, trying screenshot...")
-                else:
-                    print(f"[article] ✗ No OG image found, trying screenshot...")
-            except Exception as og_err:
-                print(f"[article] ✗ OG extraction error: {og_err}, trying screenshot...")
+                        rss_image_url = str(media_thumbnail) if media_thumbnail else None
+                    
+                    if rss_image_url and rss_image_url.startswith("http"):
+                        print(f"[article] Found RSS feed image: {rss_image_url[:100]}")
+                        uploaded_url = _upload_image_to_supabase(rss_image_url)
+                        if uploaded_url:
+                            print(f"[article] ✓✓✓ Uploaded RSS feed image: {uploaded_url[:100]}")
+                
+                # Also check for links with rel="enclosure" (common in RSS)
+                if not uploaded_url:
+                    links = entry.get("links", [])
+                    for link_obj in links:
+                        if isinstance(link_obj, dict) and link_obj.get("rel") == "enclosure":
+                            enclosure_url = link_obj.get("href")
+                            if enclosure_url and any(ext in enclosure_url.lower() for ext in [".jpg", ".jpeg", ".png", ".gif", ".webp"]):
+                                print(f"[article] Found RSS enclosure image: {enclosure_url[:100]}")
+                                uploaded_url = _upload_image_to_supabase(enclosure_url)
+                                if uploaded_url:
+                                    print(f"[article] ✓✓✓ Uploaded RSS enclosure image: {uploaded_url[:100]}")
+                                    break
+            except Exception as rss_err:
+                print(f"[article] RSS image extraction error: {rss_err}")
+            
+            # Method 1: Try OG image extraction
+            if not uploaded_url:
+                try:
+                    og_image = _extract_image_url(link)
+                    if og_image:
+                        print(f"[article] Extracted OG image: {og_image[:100]}")
+                        uploaded_url = _upload_image_to_supabase(og_image)
+                        if uploaded_url:
+                            print(f"[article] ✓✓✓ Uploaded OG image: {uploaded_url[:100]}")
+                        else:
+                            print(f"[article] ✗ OG image upload failed, trying screenshot...")
+                    else:
+                        print(f"[article] ✗ No OG image found, trying screenshot...")
+                except Exception as og_err:
+                    print(f"[article] ✗ OG extraction error: {og_err}, trying screenshot...")
             
             # Method 2: If OG image failed, try screenshot service as fallback
             if not uploaded_url:
