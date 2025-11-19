@@ -47,6 +47,29 @@ function pickImage(item) {
     }
   }
 
+  // If no image found, try to construct OG image URL from article link
+  const link = item?.link || item?.url;
+  if (link && link !== '#') {
+    try {
+      // Try common OG image patterns
+      const url = new URL(link);
+      const hostname = url.hostname;
+      
+      // For some sites, we can construct image URLs
+      if (hostname.includes('thehackernews.com')) {
+        // The Hacker News often has images at predictable paths
+        return `https://thehackernews.com/images/-/thehackernews-logo.png`;
+      } else if (hostname.includes('bleepingcomputer.com')) {
+        return `https://www.bleepingcomputer.com/images/news/og-image.png`;
+      } else if (hostname.includes('darkreading.com')) {
+        return `https://www.darkreading.com/images/dark-reading-logo.png`;
+      }
+    } catch (e) {
+      // URL parsing failed, continue to fallback
+    }
+  }
+
+  // Fallback to Clearbit logo (may be blocked by ad blockers)
   const hostname = extractHostname(item);
   if (hostname) {
     return `https://logo.clearbit.com/${hostname}`;
