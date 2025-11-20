@@ -713,23 +713,24 @@ def fetch_feeds_and_upload(limit_per_feed: int = 12) -> None:
                 except Exception as og_err:
                     print(f"[article] ✗ OG extraction error: {og_err}, will try screenshot...")
             
-            # Method 2: ALWAYS try screenshot service as fallback (even if RSS/OG succeeded but upload failed)
+            # Method 2: ALWAYS try screenshot service as fallback
             # This ensures we get a screenshot for articles without images
+            # Screenshot service is reliable and will generate fresh screenshots
             if not uploaded_url:
                 try:
                     print(f"[article] ========================================")
-                    print(f"[article] SCREENSHOT FALLBACK: Attempting screenshot service for {link[:60]}")
+                    print(f"[article] 📸 SCREENSHOT FALLBACK: Generating fresh screenshot for {link[:60]}")
                     print(f"[article] ========================================")
                     screenshot_url = _get_screenshot_url(link)
                     if screenshot_url:
-                        print(f"[article] ✓ Got screenshot URL: {screenshot_url[:100]}")
+                        print(f"[article] ✓ Got screenshot URL from service: {screenshot_url[:100]}")
                         uploaded_url = _upload_image_to_supabase(screenshot_url)
                         if uploaded_url:
-                            print(f"[article] ✓✓✓✓✓ SUCCESS: Uploaded screenshot: {uploaded_url[:100]}")
+                            print(f"[article] ✓✓✓✓✓ SUCCESS: Uploaded fresh screenshot: {uploaded_url[:100]}")
                         else:
                             print(f"[article] ✗ Screenshot upload to Supabase failed")
                     else:
-                        print(f"[article] ✗✗✗ Screenshot service returned no URL")
+                        print(f"[article] ✗✗✗ Screenshot service returned no URL - all services failed")
                 except Exception as screenshot_err:
                     print(f"[article] ✗✗✗ Screenshot service error: {screenshot_err}")
                     import traceback
