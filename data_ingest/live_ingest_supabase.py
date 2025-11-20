@@ -664,41 +664,56 @@ def fetch_feeds_and_upload(limit_per_feed: int = 12) -> None:
             uploaded_url = None
             print(f"[article] Processing thumbnail for: {title[:50]}...")
             
-            # Method 0: Try RSS feed entry image first (fastest, most reliable)
+            # Check if article already exists in DB and has no image_url - prioritize screenshot
+            existing_has_image = False
             try:
-                # Check if RSS entry has media:thumbnail or media:content
-                media_thumbnail = entry.get("media_thumbnail") or entry.get("media_content")
-                if media_thumbnail:
-                    if isinstance(media_thumbnail, list) and len(media_thumbnail) > 0:
-                        rss_image_url = media_thumbnail[0].get("url") or media_thumbnail[0].get("href")
-                    elif isinstance(media_thumbnail, dict):
-                        rss_image_url = media_thumbnail.get("url") or media_thumbnail.get("href")
+                existing = supabase.table("articles").select("image_url").eq("link", link).limit(1).execute()
+                if existing.data and len(existing.data) > 0:
+                    existing_img = existing.data[0].get("image_url")
+                    if existing_img and existing_img.strip():
+                        existing_has_image = True
+                        print(f"[article] Article exists in DB with image_url: {existing_img[:80] if len(existing_img) > 80 else existing_img}")
                     else:
-                        rss_image_url = str(media_thumbnail) if media_thumbnail else None
-                    
-                    if rss_image_url and rss_image_url.startswith("http"):
-                        print(f"[article] Found RSS feed image: {rss_image_url[:100]}")
-                        uploaded_url = _upload_image_to_supabase(rss_image_url)
-                        if uploaded_url:
-                            print(f"[article] ✓✓✓ Uploaded RSS feed image: {uploaded_url[:100]}")
-                
-                # Also check for links with rel="enclosure" (common in RSS)
-                if not uploaded_url:
-                    links = entry.get("links", [])
-                    for link_obj in links:
-                        if isinstance(link_obj, dict) and link_obj.get("rel") == "enclosure":
-                            enclosure_url = link_obj.get("href")
-                            if enclosure_url and any(ext in enclosure_url.lower() for ext in [".jpg", ".jpeg", ".png", ".gif", ".webp"]):
-                                print(f"[article] Found RSS enclosure image: {enclosure_url[:100]}")
-                                uploaded_url = _upload_image_to_supabase(enclosure_url)
-                                if uploaded_url:
-                                    print(f"[article] ✓✓✓ Uploaded RSS enclosure image: {uploaded_url[:100]}")
-                                    break
-            except Exception as rss_err:
-                print(f"[article] RSS image extraction error: {rss_err}")
+                        print(f"[article] ⚠️  Article exists in DB but NO image_url - will prioritize screenshot!")
+            except Exception as check_err:
+                print(f"[article] Could not check existing article: {check_err}")
             
-            # Method 1: Try OG image extraction
-            if not uploaded_url:
+            # Method 0: Try RSS feed entry image first (fastest, most reliable)
+            if not existing_has_image:  # Only try RSS if existing article has no image
+                try:
+                    # Check if RSS entry has media:thumbnail or media:content
+                    media_thumbnail = entry.get("media_thumbnail") or entry.get("media_content")
+                    if media_thumbnail:
+                        if isinstance(media_thumbnail, list) and len(media_thumbnail) > 0:
+                            rss_image_url = media_thumbnail[0].get("url") or media_thumbnail[0].get("href")
+                        elif isinstance(media_thumbnail, dict):
+                            rss_image_url = media_thumbnail.get("url") or media_thumbnail.get("href")
+                        else:
+                            rss_image_url = str(media_thumbnail) if media_thumbnail else None
+                        
+                        if rss_image_url and rss_image_url.startswith("http"):
+                            print(f"[article] Found RSS feed image: {rss_image_url[:100]}")
+                            uploaded_url = _upload_image_to_supabase(rss_image_url)
+                            if uploaded_url:
+                                print(f"[article] ✓✓✓ Uploaded RSS feed image: {uploaded_url[:100]}")
+                    
+                    # Also check for links with rel="enclosure" (common in RSS)
+                    if not uploaded_url:
+                        links = entry.get("links", [])
+                        for link_obj in links:
+                            if isinstance(link_obj, dict) and link_obj.get("rel") == "enclosure":
+                                enclosure_url = link_obj.get("href")
+                                if enclosure_url and any(ext in enclosure_url.lower() for ext in [".jpg", ".jpeg", ".png", ".gif", ".webp"]):
+                                    print(f"[article] Found RSS enclosure image: {enclosure_url[:100]}")
+                                    uploaded_url = _upload_image_to_supabase(enclosure_url)
+                                    if uploaded_url:
+                                        print(f"[article] ✓✓✓ Uploaded RSS enclosure image: {uploaded_url[:100]}")
+                                        break
+                except Exception as rss_err:
+                    print(f"[article] RSS image extraction error: {rss_err}")
+            
+            # Method 1: Try OG image extraction (skip if existing article has no image - prioritize screenshot)
+            if not uploaded_url and not existing_has_image:
                 try:
                     og_image = _extract_image_url(link)
                     if og_image:
@@ -713,17 +728,21 @@ def fetch_feeds_and_upload(limit_per_feed: int = 12) -> None:
                 except Exception as og_err:
                     print(f"[article] ✗ OG extraction error: {og_err}, will try screenshot...")
             
-            # Method 2: ALWAYS try screenshot service as fallback
-            # This ensures we get a screenshot for articles without images
-            # Screenshot service is reliable and will generate fresh screenshots
+            # Method 2: ALWAYS try screenshot service as fallback (or if existing article has no image)
+            # Screenshot service generates fresh screenshots - most reliable for articles without images
             if not uploaded_url:
                 try:
                     print(f"[article] ========================================")
-                    print(f"[article] 📸 SCREENSHOT FALLBACK: Generating fresh screenshot for {link[:60]}")
+                    print(f"[article] 📸 SCREENSHOT SERVICE: Generating fresh screenshot for {link[:60]}")
+                    if existing_has_image:
+                        print(f"[article] (Existing article has image, but trying screenshot anyway for update)")
                     print(f"[article] ========================================")
+                    # Add small delay to avoid rate limits
+                    import time
+                    time.sleep(0.5)  # 500ms delay between screenshot requests
                     screenshot_url = _get_screenshot_url(link)
                     if screenshot_url:
-                        print(f"[article] ✓ Got screenshot URL from service: {screenshot_url[:100]}")
+                        print(f"[article] ✓✓✓ Got screenshot URL from service: {screenshot_url[:100]}")
                         uploaded_url = _upload_image_to_supabase(screenshot_url)
                         if uploaded_url:
                             print(f"[article] ✓✓✓✓✓ SUCCESS: Uploaded fresh screenshot: {uploaded_url[:100]}")
