@@ -528,6 +528,13 @@ def _persist_iocs(iocs: Iterable[Dict[str, str]]) -> None:
 
 def fetch_feeds_and_upload(limit_per_feed: int = 12) -> None:
     import sys
+    sys.stdout.flush()  # Force immediate output
+    print("[ingest] ========================================")
+    print("[ingest] fetch_feeds_and_upload() STARTED")
+    print(f"[ingest] limit_per_feed: {limit_per_feed}")
+    print("[ingest] ========================================")
+    sys.stdout.flush()
+    import sys
     sys.stdout.flush()  # Force flush to ensure logs appear immediately
     
     print("=" * 60)
@@ -792,16 +799,34 @@ def fetch_feeds_and_upload(limit_per_feed: int = 12) -> None:
 
 
 if __name__ == "__main__":
+    import sys
+    sys.stdout.flush()  # Force immediate output
     try:
-        print("[SCRIPT] live_ingest_supabase.py started")
+        print("[SCRIPT] ========================================")
+        print("[SCRIPT] live_ingest_supabase.py STARTED")
+        print("[SCRIPT] ========================================")
+        sys.stdout.flush()
+        
         print("[SCRIPT] Environment check:")
         print(f"[SCRIPT]   SUPABASE_URL: {'SET' if SUPABASE_URL else 'MISSING'}")
         print(f"[SCRIPT]   SUPABASE_KEY: {'SET' if SUPABASE_KEY else 'MISSING'}")
         print(f"[SCRIPT]   SUPABASE_IMAGE_BUCKET: {SUPABASE_IMAGE_BUCKET}")
+        sys.stdout.flush()
+        
+        print("[SCRIPT] Starting fetch_feeds_and_upload()...")
+        sys.stdout.flush()
+        
         fetch_feeds_and_upload()
-        print("[SCRIPT] live_ingest_supabase.py completed successfully")
+        
+        print("[SCRIPT] ========================================")
+        print("[SCRIPT] live_ingest_supabase.py COMPLETED SUCCESSFULLY")
+        print("[SCRIPT] ========================================")
+        sys.stdout.flush()
     except Exception as e:
+        print(f"[SCRIPT] ========================================")
         print(f"[SCRIPT] ERROR: {e}")
+        print("[SCRIPT] ========================================")
         import traceback
         traceback.print_exc()
+        sys.stdout.flush()
         raise
