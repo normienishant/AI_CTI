@@ -252,9 +252,9 @@ def _get_screenshot_url(article_url: str) -> Optional[str]:
 
 
 def _extract_image_url(article_url: str) -> Optional[str]:
-    """Extract featured/OG image from article - IMPROVED to find article images"""
+    """Extract featured/OG image from article - ENHANCED to find actual article images, not full page screenshots"""
     try:
-        resp = requests.get(article_url, timeout=12, headers=HEADERS, allow_redirects=True)
+        resp = requests.get(article_url, timeout=15, headers=HEADERS, allow_redirects=True)
         resp.raise_for_status()
     except Exception as exc:
         print(f"[image] fetch failed for {article_url}: {exc}")
@@ -262,7 +262,7 @@ def _extract_image_url(article_url: str) -> Optional[str]:
 
     soup = BeautifulSoup(resp.text, "lxml")
     
-    # Method 1: Try OG/Twitter meta tags (most reliable for featured images)
+    # Method 1: Try OG/Twitter meta tags (MOST RELIABLE - these are actual featured images)
     meta_selectors = [
         ("meta", {"property": "og:image"}),
         ("meta", {"name": "og:image"}),
@@ -270,41 +270,58 @@ def _extract_image_url(article_url: str) -> Optional[str]:
         ("meta", {"name": "twitter:image"}),
         ("meta", {"property": "og:image:url"}),
         ("meta", {"name": "twitter:image:src"}),
+        ("meta", {"property": "twitter:image:src"}),
+        ("link", {"rel": "image_src"}),  # Some sites use this
     ]
     for tag_name, attrs in meta_selectors:
         tag = soup.find(tag_name, attrs=attrs)
-        if tag and tag.get("content"):
-            url = tag["content"].strip()
-            if url.startswith("//"):
-                parsed = urlparse(article_url)
-                url = f"{parsed.scheme}:{url}"
-            if url.startswith("http"):
-                print(f"[image] ✓ Found OG/Twitter image: {url[:100]}")
-                return url
+        if tag:
+            url = tag.get("content") or tag.get("href")
+            if url:
+                url = url.strip()
+                # Skip placeholder/default images
+                url_lower = url.lower()
+                if any(skip in url_lower for skip in ["placeholder", "default", "logo-only", "no-image"]):
+                    continue
+                if url.startswith("//"):
+                    parsed = urlparse(article_url)
+                    url = f"{parsed.scheme}:{url}"
+                if url.startswith("http") and not url.startswith("http://localhost"):
+                    # Verify it's not a screenshot service URL
+                    if "screenshot" not in url_lower and "microlink" not in url_lower:
+                        print(f"[image] ✓✓✓ Found OG/Twitter meta image: {url[:100]}")
+                        return url
     
-    # Method 2: Try to find article featured image in common patterns
+    # Method 2: Try to find article featured image in common HTML patterns
     # Look for article header images, featured images, hero images
     article_selectors = [
-        ("img", {"class": re.compile(r"featured|hero|header|article-image|post-image|thumbnail", re.I)}),
-        ("img", {"id": re.compile(r"featured|hero|header|article-image|post-image", re.I)}),
-        ("div", {"class": re.compile(r"featured-image|hero-image|article-image|post-thumbnail", re.I)}),
-        ("figure", {"class": re.compile(r"featured|article-image|post-image", re.I)}),
+        ("img", {"class": re.compile(r"featured|hero|header|article-image|post-image|thumbnail|entry-image|wp-post-image", re.I)}),
+        ("img", {"id": re.compile(r"featured|hero|header|article-image|post-image|main-image", re.I)}),
+        ("img", {"data-src": re.compile(r"featured|hero|header|article", re.I)}),
+        ("div", {"class": re.compile(r"featured-image|hero-image|article-image|post-thumbnail|entry-thumbnail|post-featured", re.I)}),
+        ("figure", {"class": re.compile(r"featured|article-image|post-image|wp-block-image", re.I)}),
+        ("picture", {"class": re.compile(r"featured|hero|article-image", re.I)}),
     ]
     
     for selector_type, attrs in article_selectors:
-        elements = soup.find_all(selector_type, attrs=attrs)
+        elements = soup.find_all(selector_type, attrs=attrs, limit=5)  # Limit to first 5 matches
         for elem in elements:
             if selector_type == "img":
-                img_url = elem.get("src") or elem.get("data-src") or elem.get("data-lazy-src")
+                img_url = elem.get("src") or elem.get("data-src") or elem.get("data-lazy-src") or elem.get("data-original")
             else:
-                # For div/figure, find img inside
+                # For div/figure/picture, find img inside
                 img = elem.find("img")
                 if img:
-                    img_url = img.get("src") or img.get("data-src") or img.get("data-lazy-src")
+                    img_url = img.get("src") or img.get("data-src") or img.get("data-lazy-src") or img.get("data-original")
                 else:
                     continue
             
             if img_url:
+                # Skip placeholder/default images
+                img_url_lower = img_url.lower()
+                if any(skip in img_url_lower for skip in ["placeholder", "default", "logo-only", "no-image", "1x1", "spacer"]):
+                    continue
+                
                 # Resolve relative URLs
                 if img_url.startswith("//"):
                     parsed = urlparse(article_url)
@@ -315,18 +332,28 @@ def _extract_image_url(article_url: str) -> Optional[str]:
                 elif not img_url.startswith("http"):
                     continue
                 
+                # Skip screenshot service URLs
+                if "screenshot" in img_url_lower or "microlink" in img_url_lower:
+                    continue
+                
                 # Verify it's a real image URL (not a placeholder or icon)
-                if any(ext in img_url.lower() for ext in [".jpg", ".jpeg", ".png", ".webp", ".gif"]):
-                    print(f"[image] ✓ Found article featured image: {img_url[:100]}")
+                if any(ext in img_url_lower for ext in [".jpg", ".jpeg", ".png", ".webp", ".gif"]):
+                    print(f"[image] ✓✓✓ Found article featured image (HTML pattern): {img_url[:100]}")
                     return img_url
     
     # Method 3: Find first large image in article content (not icons/logos)
-    article_content = soup.find("article") or soup.find("main") or soup.find("div", {"class": re.compile(r"content|post|article", re.I)})
+    article_content = soup.find("article") or soup.find("main") or soup.find("div", {"class": re.compile(r"content|post|article|entry-content", re.I)})
     if article_content:
-        images = article_content.find_all("img")
+        images = article_content.find_all("img", limit=10)  # Limit to first 10 images
         for img in images:
-            src = img.get("src") or img.get("data-src") or img.get("data-lazy-src")
+            src = img.get("src") or img.get("data-src") or img.get("data-lazy-src") or img.get("data-original")
             if not src:
+                continue
+            
+            src_lower = src.lower()
+            
+            # Skip placeholder/default images
+            if any(skip in src_lower for skip in ["placeholder", "default", "logo-only", "no-image", "1x1", "spacer", "blank"]):
                 continue
             
             # Skip small images (likely icons/logos)
@@ -335,14 +362,17 @@ def _extract_image_url(article_url: str) -> Optional[str]:
             if width and height:
                 try:
                     w, h = int(width), int(height)
-                    if w < 200 or h < 200:  # Skip small images
+                    if w < 300 or h < 200:  # Skip small images (increased threshold)
                         continue
                 except:
                     pass
             
             # Skip common icon/logo patterns
-            src_lower = src.lower()
-            if any(skip in src_lower for skip in ["logo", "icon", "avatar", "button", "badge", "spinner"]):
+            if any(skip in src_lower for skip in ["logo", "icon", "avatar", "button", "badge", "spinner", "social", "share", "facebook", "twitter", "linkedin"]):
+                continue
+            
+            # Skip screenshot service URLs
+            if "screenshot" in src_lower or "microlink" in src_lower:
                 continue
             
             # Resolve relative URLs
@@ -356,11 +386,36 @@ def _extract_image_url(article_url: str) -> Optional[str]:
                 continue
             
             # Must be a real image file
-            if any(ext in src.lower() for ext in [".jpg", ".jpeg", ".png", ".webp", ".gif"]):
-                print(f"[image] ✓ Found article content image: {src[:100]}")
+            if any(ext in src_lower for ext in [".jpg", ".jpeg", ".png", ".webp", ".gif"]):
+                print(f"[image] ✓✓✓ Found article content image: {src[:100]}")
                 return src
     
-    print(f"[image] ✗ No featured image found for {article_url[:60]}")
+    # Method 4: Try JSON-LD structured data (some sites use this)
+    try:
+        json_ld_scripts = soup.find_all("script", type="application/ld+json")
+        for script in json_ld_scripts:
+            try:
+                data = json.loads(script.string)
+                if isinstance(data, dict):
+                    # Check for image in various JSON-LD formats
+                    image = data.get("image") or data.get("thumbnailUrl")
+                    if isinstance(image, dict):
+                        image = image.get("url") or image.get("@id")
+                    if isinstance(image, list) and len(image) > 0:
+                        image = image[0]
+                        if isinstance(image, dict):
+                            image = image.get("url") or image.get("@id")
+                    if image and isinstance(image, str) and image.startswith("http"):
+                        image_lower = image.lower()
+                        if "screenshot" not in image_lower and "microlink" not in image_lower:
+                            print(f"[image] ✓✓✓ Found JSON-LD image: {image[:100]}")
+                            return image
+            except:
+                continue
+    except:
+        pass
+    
+    print(f"[image] ✗✗✗ No featured image found for {article_url[:60]}")
     return None
 
 
@@ -797,35 +852,47 @@ def fetch_feeds_and_upload(limit_per_feed: int = 12) -> None:
                 except Exception as rss_err:
                     print(f"[article] RSS image extraction error: {rss_err}")
             
-            # Method 1: Try OG/featured image extraction (PRIORITY - gets actual article image, not full page)
+            # Method 1: Try OG/featured image extraction (HIGHEST PRIORITY - gets actual article image, NOT full page screenshot)
             # Always try this first - it gets the actual article featured image, not a full page screenshot
+            # This is CRITICAL to avoid full page screenshots
             if not uploaded_url:
                 try:
-                    print(f"[article] Attempting to extract featured/OG image from article...")
+                    print(f"[article] ========================================")
+                    print(f"[article] STEP 1: Extracting featured/OG image from article...")
+                    print(f"[article] (This gets the actual article image, NOT a full page screenshot)")
+                    print(f"[article] ========================================")
                     og_image = _extract_image_url(link)
                     if og_image:
-                        print(f"[article] ✓ Extracted featured/OG image: {og_image[:100]}")
-                        uploaded_url = _upload_image_to_supabase(og_image)
-                        if uploaded_url:
-                            print(f"[article] ✓✓✓ SUCCESS: Uploaded featured image: {uploaded_url[:100]}")
+                        print(f"[article] ✓✓✓ Extracted featured/OG image: {og_image[:100]}")
+                        # Verify it's not a screenshot service URL
+                        if "screenshot" not in og_image.lower() and "microlink" not in og_image.lower():
+                            uploaded_url = _upload_image_to_supabase(og_image)
+                            if uploaded_url:
+                                print(f"[article] ✓✓✓✓✓ SUCCESS: Uploaded ACTUAL featured image: {uploaded_url[:100]}")
+                                print(f"[article] This is the real article image, NOT a full page screenshot!")
+                            else:
+                                print(f"[article] ✗ Featured image upload failed, will try screenshot as last resort...")
                         else:
-                            print(f"[article] ✗ Featured image upload failed, will try screenshot as fallback...")
+                            print(f"[article] ⚠️  Extracted URL is a screenshot service, skipping...")
                     else:
-                        print(f"[article] ✗ No featured/OG image found, will try screenshot as fallback...")
+                        print(f"[article] ✗ No featured/OG image found in article HTML")
+                        print(f"[article] Will try screenshot service as last resort (but this will be full page)")
                 except Exception as og_err:
-                    print(f"[article] ✗ Featured image extraction error: {og_err}, will try screenshot as fallback...")
+                    print(f"[article] ✗ Featured image extraction error: {og_err}")
                     import traceback
                     traceback.print_exc()
             
             # Method 2: Screenshot service as LAST RESORT fallback only
-            # NOTE: Screenshot service takes FULL PAGE screenshots, not just thumbnails
-            # We prefer OG/featured images (Method 1) which are actual article images
-            # Only use screenshot if no featured image is available
+            # WARNING: Screenshot service takes FULL PAGE screenshots, not just thumbnails
+            # We STRONGLY prefer OG/featured images (Method 1) which are actual article images
+            # Only use screenshot if NO featured image is available at all
+            # This should be rare - most sites have OG images
             if not uploaded_url:
                 try:
                     print(f"[article] ========================================")
-                    print(f"[article] ⚠️  SCREENSHOT FALLBACK: No featured image found, using full page screenshot")
-                    print(f"[article] (This will capture the entire webpage, not just the article image)")
+                    print(f"[article] ⚠️⚠️⚠️  LAST RESORT: No featured image found, using full page screenshot")
+                    print(f"[article] WARNING: This will capture the ENTIRE webpage, not just the article image")
+                    print(f"[article] This is NOT ideal - we prefer actual article images!")
                     print(f"[article] ========================================")
                     # Add small delay to avoid rate limits
                     import time
@@ -833,11 +900,12 @@ def fetch_feeds_and_upload(limit_per_feed: int = 12) -> None:
                     screenshot_url = _get_screenshot_url(link)
                     if screenshot_url:
                         print(f"[article] ✓✓✓ Got screenshot URL from service: {screenshot_url[:100]}")
-                        print(f"[article] Now attempting to upload screenshot to Supabase...")
+                        print(f"[article] Now attempting to upload FULL PAGE screenshot to Supabase...")
                         uploaded_url = _upload_image_to_supabase(screenshot_url)
                         if uploaded_url:
                             print(f"[article] ✓✓✓✓✓ SUCCESS: Uploaded full page screenshot: {uploaded_url[:100]}")
-                            print(f"[article] Note: This is a full page screenshot, not just the article image")
+                            print(f"[article] ⚠️  NOTE: This is a FULL PAGE screenshot, not just the article image")
+                            print(f"[article] Future improvement: Try to extract featured image from screenshot or use better OG extraction")
                         else:
                             print(f"[article] ✗✗✗ Screenshot upload to Supabase FAILED!")
                             print(f"[article] Screenshot URL was: {screenshot_url[:100]}")
