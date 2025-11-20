@@ -771,18 +771,34 @@ def fetch_feeds_and_upload(limit_per_feed: int = 12) -> None:
             img = art.get("image_url") or ""
             print(f"[articles] Article {i+1}: '{art.get('title', '')[:40]}' -> image_url: {img[:100] if img else 'NONE/EMPTY'}")
         
+        # Use upsert with ignore_duplicates=False to update existing rows
+        # This ensures image_url gets updated even if article already exists
         response = supabase.table("articles").upsert(
             collected,
             on_conflict="link",
+            ignore_duplicates=False,  # Update existing rows instead of ignoring
         ).execute()
         inserted = len(response.data) if getattr(response, "data", None) else len(collected)
         print(f"[articles] ✓ upserted {inserted} records")
         
-        # Verify what was actually saved
+        # Verify what was actually saved - query back from database
         if response.data:
             for i, saved in enumerate(response.data[:3]):
                 saved_img = saved.get("image_url")
-                print(f"[articles] Saved article {i+1}: image_url = {saved_img[:100] if saved_img else 'NONE'}")
+                print(f"[articles] Response article {i+1}: image_url = {saved_img[:100] if saved_img else 'NONE'}")
+        
+        # Double-check by querying database directly
+        print(f"[articles] Verifying saved data in database...")
+        for i, art in enumerate(collected[:3]):
+            link = art.get("link")
+            if link:
+                try:
+                    db_check = supabase.table("articles").select("id, title, image_url").eq("link", link).limit(1).execute()
+                    if db_check.data:
+                        db_img = db_check.data[0].get("image_url")
+                        print(f"[articles] DB check {i+1}: '{art.get('title', '')[:30]}' -> image_url: {db_img[:80] if db_img else 'NONE/EMPTY'}")
+                except Exception as db_err:
+                    print(f"[articles] DB check failed for {link[:50]}: {db_err}")
     except Exception as exc:
         print(f"[articles] ✗ upsert failed: {exc}")
         import traceback
