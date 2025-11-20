@@ -252,6 +252,7 @@ def _get_screenshot_url(article_url: str) -> Optional[str]:
 
 
 def _extract_image_url(article_url: str) -> Optional[str]:
+    """Extract featured/OG image from article - IMPROVED to find article images"""
     try:
         resp = requests.get(article_url, timeout=12, headers=HEADERS, allow_redirects=True)
         resp.raise_for_status()
@@ -260,12 +261,15 @@ def _extract_image_url(article_url: str) -> Optional[str]:
         return None
 
     soup = BeautifulSoup(resp.text, "lxml")
+    
+    # Method 1: Try OG/Twitter meta tags (most reliable for featured images)
     meta_selectors = [
         ("meta", {"property": "og:image"}),
         ("meta", {"name": "og:image"}),
         ("meta", {"property": "twitter:image"}),
         ("meta", {"name": "twitter:image"}),
         ("meta", {"property": "og:image:url"}),
+        ("meta", {"name": "twitter:image:src"}),
     ]
     for tag_name, attrs in meta_selectors:
         tag = soup.find(tag_name, attrs=attrs)
@@ -273,9 +277,90 @@ def _extract_image_url(article_url: str) -> Optional[str]:
             url = tag["content"].strip()
             if url.startswith("//"):
                 parsed = urlparse(article_url)
-                return f"{parsed.scheme}:{url}"
+                url = f"{parsed.scheme}:{url}"
             if url.startswith("http"):
+                print(f"[image] ✓ Found OG/Twitter image: {url[:100]}")
                 return url
+    
+    # Method 2: Try to find article featured image in common patterns
+    # Look for article header images, featured images, hero images
+    article_selectors = [
+        ("img", {"class": re.compile(r"featured|hero|header|article-image|post-image|thumbnail", re.I)}),
+        ("img", {"id": re.compile(r"featured|hero|header|article-image|post-image", re.I)}),
+        ("div", {"class": re.compile(r"featured-image|hero-image|article-image|post-thumbnail", re.I)}),
+        ("figure", {"class": re.compile(r"featured|article-image|post-image", re.I)}),
+    ]
+    
+    for selector_type, attrs in article_selectors:
+        elements = soup.find_all(selector_type, attrs=attrs)
+        for elem in elements:
+            if selector_type == "img":
+                img_url = elem.get("src") or elem.get("data-src") or elem.get("data-lazy-src")
+            else:
+                # For div/figure, find img inside
+                img = elem.find("img")
+                if img:
+                    img_url = img.get("src") or img.get("data-src") or img.get("data-lazy-src")
+                else:
+                    continue
+            
+            if img_url:
+                # Resolve relative URLs
+                if img_url.startswith("//"):
+                    parsed = urlparse(article_url)
+                    img_url = f"{parsed.scheme}:{img_url}"
+                elif img_url.startswith("/"):
+                    parsed = urlparse(article_url)
+                    img_url = f"{parsed.scheme}://{parsed.netloc}{img_url}"
+                elif not img_url.startswith("http"):
+                    continue
+                
+                # Verify it's a real image URL (not a placeholder or icon)
+                if any(ext in img_url.lower() for ext in [".jpg", ".jpeg", ".png", ".webp", ".gif"]):
+                    print(f"[image] ✓ Found article featured image: {img_url[:100]}")
+                    return img_url
+    
+    # Method 3: Find first large image in article content (not icons/logos)
+    article_content = soup.find("article") or soup.find("main") or soup.find("div", {"class": re.compile(r"content|post|article", re.I)})
+    if article_content:
+        images = article_content.find_all("img")
+        for img in images:
+            src = img.get("src") or img.get("data-src") or img.get("data-lazy-src")
+            if not src:
+                continue
+            
+            # Skip small images (likely icons/logos)
+            width = img.get("width")
+            height = img.get("height")
+            if width and height:
+                try:
+                    w, h = int(width), int(height)
+                    if w < 200 or h < 200:  # Skip small images
+                        continue
+                except:
+                    pass
+            
+            # Skip common icon/logo patterns
+            src_lower = src.lower()
+            if any(skip in src_lower for skip in ["logo", "icon", "avatar", "button", "badge", "spinner"]):
+                continue
+            
+            # Resolve relative URLs
+            if src.startswith("//"):
+                parsed = urlparse(article_url)
+                src = f"{parsed.scheme}:{src}"
+            elif src.startswith("/"):
+                parsed = urlparse(article_url)
+                src = f"{parsed.scheme}://{parsed.netloc}{src}"
+            elif not src.startswith("http"):
+                continue
+            
+            # Must be a real image file
+            if any(ext in src.lower() for ext in [".jpg", ".jpeg", ".png", ".webp", ".gif"]):
+                print(f"[image] ✓ Found article content image: {src[:100]}")
+                return src
+    
+    print(f"[image] ✗ No featured image found for {article_url[:60]}")
     return None
 
 
@@ -712,30 +797,35 @@ def fetch_feeds_and_upload(limit_per_feed: int = 12) -> None:
                 except Exception as rss_err:
                     print(f"[article] RSS image extraction error: {rss_err}")
             
-            # Method 1: Try OG image extraction (skip if existing article has no image - prioritize screenshot)
-            if not uploaded_url and not existing_has_image:
+            # Method 1: Try OG/featured image extraction (PRIORITY - gets actual article image, not full page)
+            # Always try this first - it gets the actual article featured image, not a full page screenshot
+            if not uploaded_url:
                 try:
+                    print(f"[article] Attempting to extract featured/OG image from article...")
                     og_image = _extract_image_url(link)
                     if og_image:
-                        print(f"[article] Extracted OG image: {og_image[:100]}")
+                        print(f"[article] ✓ Extracted featured/OG image: {og_image[:100]}")
                         uploaded_url = _upload_image_to_supabase(og_image)
                         if uploaded_url:
-                            print(f"[article] ✓✓✓ Uploaded OG image: {uploaded_url[:100]}")
+                            print(f"[article] ✓✓✓ SUCCESS: Uploaded featured image: {uploaded_url[:100]}")
                         else:
-                            print(f"[article] ✗ OG image upload failed, will try screenshot...")
+                            print(f"[article] ✗ Featured image upload failed, will try screenshot as fallback...")
                     else:
-                        print(f"[article] ✗ No OG image found, will try screenshot...")
+                        print(f"[article] ✗ No featured/OG image found, will try screenshot as fallback...")
                 except Exception as og_err:
-                    print(f"[article] ✗ OG extraction error: {og_err}, will try screenshot...")
+                    print(f"[article] ✗ Featured image extraction error: {og_err}, will try screenshot as fallback...")
+                    import traceback
+                    traceback.print_exc()
             
-            # Method 2: ALWAYS try screenshot service as fallback (or if existing article has no image)
-            # Screenshot service generates fresh screenshots - most reliable for articles without images
+            # Method 2: Screenshot service as LAST RESORT fallback only
+            # NOTE: Screenshot service takes FULL PAGE screenshots, not just thumbnails
+            # We prefer OG/featured images (Method 1) which are actual article images
+            # Only use screenshot if no featured image is available
             if not uploaded_url:
                 try:
                     print(f"[article] ========================================")
-                    print(f"[article] 📸 SCREENSHOT SERVICE: Generating fresh screenshot for {link[:60]}")
-                    if existing_has_image:
-                        print(f"[article] (Existing article has image, but trying screenshot anyway for update)")
+                    print(f"[article] ⚠️  SCREENSHOT FALLBACK: No featured image found, using full page screenshot")
+                    print(f"[article] (This will capture the entire webpage, not just the article image)")
                     print(f"[article] ========================================")
                     # Add small delay to avoid rate limits
                     import time
@@ -746,8 +836,8 @@ def fetch_feeds_and_upload(limit_per_feed: int = 12) -> None:
                         print(f"[article] Now attempting to upload screenshot to Supabase...")
                         uploaded_url = _upload_image_to_supabase(screenshot_url)
                         if uploaded_url:
-                            print(f"[article] ✓✓✓✓✓ SUCCESS: Uploaded fresh screenshot: {uploaded_url[:100]}")
-                            print(f"[article] Screenshot will be saved to database with image_url: {uploaded_url[:100]}")
+                            print(f"[article] ✓✓✓✓✓ SUCCESS: Uploaded full page screenshot: {uploaded_url[:100]}")
+                            print(f"[article] Note: This is a full page screenshot, not just the article image")
                         else:
                             print(f"[article] ✗✗✗ Screenshot upload to Supabase FAILED!")
                             print(f"[article] Screenshot URL was: {screenshot_url[:100]}")
