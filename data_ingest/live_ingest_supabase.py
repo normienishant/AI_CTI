@@ -150,64 +150,104 @@ def _resolve_source_name(url: str, default: str) -> str:
 
 
 def _get_screenshot_url(article_url: str) -> Optional[str]:
-    """Get screenshot URL using screenshot API service as fallback"""
+    """Get screenshot URL using screenshot API service as fallback - IMPROVED with retries"""
     if not article_url:
         return None
     
-    print(f"[screenshot] Attempting to get screenshot for: {article_url[:80]}")
+    print(f"[screenshot] ========================================")
+    print(f"[screenshot] Attempting screenshot for: {article_url[:80]}")
+    print(f"[screenshot] ========================================")
     
-    # Method 1: Try microlink.io screenshot API (free, no API key required)
-    try:
-        microlink_url = f"https://api.microlink.io/?url={requests.utils.quote(article_url)}&screenshot=true&viewport.width=1200&viewport.height=630"
-        print(f"[screenshot] Trying microlink.io: {microlink_url[:100]}")
-        resp = requests.get(microlink_url, timeout=15, headers=HEADERS)
-        if resp.status_code == 200:
-            data = resp.json()
-            screenshot_url = data.get("data", {}).get("screenshot", {}).get("url")
-            if screenshot_url and screenshot_url.startswith("http"):
-                print(f"[screenshot] ✓ Got screenshot URL from microlink: {screenshot_url[:80]}")
-                # Verify the screenshot URL works
+    # Method 1: Try microlink.io screenshot API (free, no API key required) - MOST RELIABLE
+    for attempt in range(2):  # Retry once
+        try:
+            microlink_url = f"https://api.microlink.io/?url={requests.utils.quote(article_url)}&screenshot=true&viewport.width=1200&viewport.height=630&waitUntil=networkidle0"
+            print(f"[screenshot] [Attempt {attempt+1}/2] Trying microlink.io...")
+            resp = requests.get(microlink_url, timeout=20, headers=HEADERS, allow_redirects=True)
+            print(f"[screenshot] microlink.io response: {resp.status_code}")
+            
+            if resp.status_code == 200:
                 try:
-                    verify_resp = requests.head(screenshot_url, timeout=5, allow_redirects=True)
-                    if verify_resp.status_code == 200:
-                        return screenshot_url
+                    data = resp.json()
+                    screenshot_url = data.get("data", {}).get("screenshot", {}).get("url")
+                    if screenshot_url and screenshot_url.startswith("http"):
+                        print(f"[screenshot] ✓✓✓ Got screenshot URL from microlink: {screenshot_url[:100]}")
+                        # Verify the screenshot URL works
+                        try:
+                            verify_resp = requests.head(screenshot_url, timeout=10, allow_redirects=True)
+                            if verify_resp.status_code == 200:
+                                print(f"[screenshot] ✓✓✓ Screenshot URL verified and working!")
+                                return screenshot_url
+                            else:
+                                print(f"[screenshot] ⚠️  Screenshot URL returned {verify_resp.status_code}, but returning anyway")
+                                return screenshot_url  # Return anyway - might work
+                        except Exception as verify_err:
+                            print(f"[screenshot] ⚠️  Could not verify screenshot URL: {verify_err}, but returning anyway")
+                            return screenshot_url  # Return anyway - might work
                     else:
-                        print(f"[screenshot] ✗ Screenshot URL returned {verify_resp.status_code}")
-                except Exception as verify_err:
-                    print(f"[screenshot] ✗ Could not verify screenshot URL: {verify_err}")
-    except Exception as exc:
-        print(f"[screenshot] microlink.io failed: {exc}")
+                        print(f"[screenshot] ✗ No screenshot URL in microlink response")
+                except Exception as parse_err:
+                    print(f"[screenshot] ✗ Failed to parse microlink response: {parse_err}")
+            elif resp.status_code == 429:
+                print(f"[screenshot] ⚠️  Rate limited, waiting 2s before retry...")
+                import time
+                time.sleep(2)
+                continue
+            else:
+                print(f"[screenshot] ✗ microlink.io returned {resp.status_code}")
+        except requests.exceptions.Timeout:
+            print(f"[screenshot] ✗ microlink.io timeout (attempt {attempt+1})")
+            if attempt == 0:
+                import time
+                time.sleep(1)
+                continue
+        except Exception as exc:
+            print(f"[screenshot] ✗ microlink.io error: {exc}")
+            if attempt == 0:
+                import time
+                time.sleep(1)
+                continue
     
-    # Method 2: Try screenshotapi.net (free tier, but may require token)
+    # Method 2: Try screenshotapi.net (free tier)
     try:
         screenshot_api_key = os.getenv("SCREENSHOT_API_KEY", "free")
-        screenshot_api2 = f"https://shot.screenshotapi.net/screenshot?token={screenshot_api_key}&url={requests.utils.quote(article_url)}&width=1200&height=630&output=image&file_type=png"
-        print(f"[screenshot] Trying screenshotapi.net: {screenshot_api2[:100]}")
-        resp2 = requests.get(screenshot_api2, timeout=15, allow_redirects=True)
+        screenshot_api2 = f"https://shot.screenshotapi.net/screenshot?token={screenshot_api_key}&url={requests.utils.quote(article_url)}&width=1200&height=630&output=image&file_type=png&wait_for_event=load"
+        print(f"[screenshot] Trying screenshotapi.net...")
+        resp2 = requests.get(screenshot_api2, timeout=20, allow_redirects=True)
+        print(f"[screenshot] screenshotapi.net response: {resp2.status_code}")
+        
         if resp2.status_code == 200:
             # screenshotapi.net returns the image directly or a redirect
             final_url = resp2.url if resp2.url != screenshot_api2 else screenshot_api2
-            print(f"[screenshot] ✓ Got screenshot from screenshotapi.net: {final_url[:80]}")
-            return final_url
+            # Check if it's actually an image
+            content_type = resp2.headers.get("content-type", "")
+            if "image" in content_type or final_url.endswith((".png", ".jpg", ".jpeg")):
+                print(f"[screenshot] ✓✓✓ Got screenshot from screenshotapi.net: {final_url[:100]}")
+                return final_url
+            else:
+                print(f"[screenshot] ✗ screenshotapi.net returned non-image content")
     except Exception as exc:
-        print(f"[screenshot] screenshotapi.net failed: {exc}")
+        print(f"[screenshot] ✗ screenshotapi.net failed: {exc}")
     
-    # Method 3: Try htmlcsstoimage.com (free tier available)
+    # Method 3: Try htmlcsstoimage.com (requires API key)
     try:
         htmlcsstoimage_api_key = os.getenv("HTMLCSSTOIMAGE_API_KEY")
         if htmlcsstoimage_api_key:
             htmlcss_url = f"https://hcti.io/v1/image?url={requests.utils.quote(article_url)}"
-            resp3 = requests.post(htmlcss_url, auth=(htmlcsstoimage_api_key, ''), timeout=15)
+            print(f"[screenshot] Trying htmlcsstoimage.com...")
+            resp3 = requests.post(htmlcss_url, auth=(htmlcsstoimage_api_key, ''), timeout=20)
             if resp3.status_code == 200:
                 data3 = resp3.json()
                 screenshot_url3 = data3.get("url")
                 if screenshot_url3:
-                    print(f"[screenshot] ✓ Got screenshot from htmlcsstoimage: {screenshot_url3[:80]}")
+                    print(f"[screenshot] ✓✓✓ Got screenshot from htmlcsstoimage: {screenshot_url3[:80]}")
                     return screenshot_url3
+        else:
+            print(f"[screenshot] ⚠️  htmlcsstoimage API key not set, skipping")
     except Exception as exc:
-        print(f"[screenshot] htmlcsstoimage failed: {exc}")
+        print(f"[screenshot] ✗ htmlcsstoimage failed: {exc}")
     
-    print(f"[screenshot] ✗ All screenshot services failed for {article_url[:60]}")
+    print(f"[screenshot] ✗✗✗ All screenshot services failed for {article_url[:60]}")
     return None
 
 
@@ -667,28 +707,33 @@ def fetch_feeds_and_upload(limit_per_feed: int = 12) -> None:
                         if uploaded_url:
                             print(f"[article] ✓✓✓ Uploaded OG image: {uploaded_url[:100]}")
                         else:
-                            print(f"[article] ✗ OG image upload failed, trying screenshot...")
+                            print(f"[article] ✗ OG image upload failed, will try screenshot...")
                     else:
-                        print(f"[article] ✗ No OG image found, trying screenshot...")
+                        print(f"[article] ✗ No OG image found, will try screenshot...")
                 except Exception as og_err:
-                    print(f"[article] ✗ OG extraction error: {og_err}, trying screenshot...")
+                    print(f"[article] ✗ OG extraction error: {og_err}, will try screenshot...")
             
-            # Method 2: If OG image failed, try screenshot service as fallback
+            # Method 2: ALWAYS try screenshot service as fallback (even if RSS/OG succeeded but upload failed)
+            # This ensures we get a screenshot for articles without images
             if not uploaded_url:
                 try:
-                    print(f"[article] Attempting screenshot service for {link[:60]}")
+                    print(f"[article] ========================================")
+                    print(f"[article] SCREENSHOT FALLBACK: Attempting screenshot service for {link[:60]}")
+                    print(f"[article] ========================================")
                     screenshot_url = _get_screenshot_url(link)
                     if screenshot_url:
-                        print(f"[article] Got screenshot URL: {screenshot_url[:100]}")
+                        print(f"[article] ✓ Got screenshot URL: {screenshot_url[:100]}")
                         uploaded_url = _upload_image_to_supabase(screenshot_url)
                         if uploaded_url:
-                            print(f"[article] ✓✓✓ Uploaded screenshot: {uploaded_url[:100]}")
+                            print(f"[article] ✓✓✓✓✓ SUCCESS: Uploaded screenshot: {uploaded_url[:100]}")
                         else:
-                            print(f"[article] ✗ Screenshot upload failed")
+                            print(f"[article] ✗ Screenshot upload to Supabase failed")
                     else:
-                        print(f"[article] ✗ Screenshot service returned no URL")
+                        print(f"[article] ✗✗✗ Screenshot service returned no URL")
                 except Exception as screenshot_err:
-                    print(f"[article] ✗ Screenshot service error: {screenshot_err}")
+                    print(f"[article] ✗✗✗ Screenshot service error: {screenshot_err}")
+                    import traceback
+                    traceback.print_exc()
             
             if uploaded_url:
                 # CRITICAL: Verify the URL works before saving
