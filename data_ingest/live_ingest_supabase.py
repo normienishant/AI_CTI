@@ -751,7 +751,8 @@ def fetch_feeds_and_upload(limit_per_feed: int = 12) -> None:
     # Upload raw batch to storage
     try:
         raw_bytes = json.dumps(collected, indent=2, ensure_ascii=False).encode("utf-8")
-        storage.upload(f"raw-feeds/{batch_id}", io.BytesIO(raw_bytes), {"content-type": "application/json"})
+        # Use bytes directly, not BytesIO
+        storage.upload(f"raw-feeds/{batch_id}", raw_bytes, file_options={"content-type": "application/json"})
         print(f"[storage] raw batch uploaded -> raw-feeds/{batch_id}")
     except Exception as exc:
         print(f"[storage] failed to upload raw batch: {exc}")
