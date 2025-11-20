@@ -1,18 +1,12 @@
-﻿fastapi
+﻿# Lightweight requirements for API server (deployed on Render)
+# Heavy ML dependencies (torch, sentence-transformers, etc.) excluded for faster deployment
+# These are only needed for local clustering scripts, not the API server
+fastapi
 uvicorn
-streamlit
+supabase
 requests
+feedparser
 beautifulsoup4
 lxml
-nltk
-sentence-transformers
-scikit-learn
-hdbscan
-numpy
-pandas
-huggingface-hub
-transformers
-supabase
-feedparser
 apscheduler
 reportlab
