@@ -393,11 +393,17 @@ def _upload_image_to_supabase(image_url: str) -> Optional[str]:
 
     try:
         buffer = io.BytesIO(content)
-        metadata = {"content-type": content_type, "cache-control": "public, max-age=31536000"}
+        # Combine metadata and file_options into a single file_options dict
+        file_options = {
+            "content-type": content_type,
+            "cache-control": "public, max-age=31536000",
+            "upsert": "true"
+        }
         # Try to upload, but if file exists, that's okay - we'll use existing
         try:
             print(f"[image] Attempting upload to bucket '{SUPABASE_IMAGE_BUCKET}' with key '{key_with_ext}'...")
-            image_storage.upload(key_with_ext, buffer, metadata, file_options={"upsert": "true"})
+            # Supabase storage upload: upload(path, file, file_options={...})
+            image_storage.upload(key_with_ext, buffer, file_options=file_options)
             print(f"[image] ✓✓✓ Uploaded new thumbnail: {key_with_ext} ({len(content)} bytes)")
         except Exception as upload_exc:
             # File might already exist - that's fine, we'll use the existing one
@@ -414,11 +420,16 @@ def _upload_image_to_supabase(image_url: str) -> Optional[str]:
                 raise upload_exc
             else:
                 print(f"[image] Upload error (non-duplicate): {upload_exc}")
-                # Try once more with upsert
+                # Try once more with different approach - just pass file_options
                 try:
                     buffer.seek(0)
-                    image_storage.upload(key_with_ext, buffer, metadata, file_options={"upsert": "true"})
-                    print(f"[image] ✓ Uploaded with upsert: {key_with_ext}")
+                    # Try without upsert first
+                    file_options_no_upsert = {
+                        "content-type": content_type,
+                        "cache-control": "public, max-age=31536000"
+                    }
+                    image_storage.upload(key_with_ext, buffer, file_options=file_options_no_upsert)
+                    print(f"[image] ✓ Uploaded without upsert: {key_with_ext}")
                 except Exception as retry_exc:
                     print(f"[image] ✗ Upload retry also failed: {retry_exc}")
                     import traceback
