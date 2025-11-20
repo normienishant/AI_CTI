@@ -743,13 +743,18 @@ def fetch_feeds_and_upload(limit_per_feed: int = 12) -> None:
                     screenshot_url = _get_screenshot_url(link)
                     if screenshot_url:
                         print(f"[article] ✓✓✓ Got screenshot URL from service: {screenshot_url[:100]}")
+                        print(f"[article] Now attempting to upload screenshot to Supabase...")
                         uploaded_url = _upload_image_to_supabase(screenshot_url)
                         if uploaded_url:
                             print(f"[article] ✓✓✓✓✓ SUCCESS: Uploaded fresh screenshot: {uploaded_url[:100]}")
+                            print(f"[article] Screenshot will be saved to database with image_url: {uploaded_url[:100]}")
                         else:
-                            print(f"[article] ✗ Screenshot upload to Supabase failed")
+                            print(f"[article] ✗✗✗ Screenshot upload to Supabase FAILED!")
+                            print(f"[article] Screenshot URL was: {screenshot_url[:100]}")
+                            print(f"[article] Check upload logs above for errors")
                     else:
                         print(f"[article] ✗✗✗ Screenshot service returned no URL - all services failed")
+                        print(f"[article] This article will have NO image_url in database")
                 except Exception as screenshot_err:
                     print(f"[article] ✗✗✗ Screenshot service error: {screenshot_err}")
                     import traceback
@@ -831,20 +836,32 @@ def fetch_feeds_and_upload(limit_per_feed: int = 12) -> None:
                 art["image_url"] = ""
         
         articles_with_images = sum(1 for a in collected if a.get("image_url") and a.get("image_url").strip())
-        print(f"[articles] About to upsert {len(collected)} articles, {articles_with_images} have image_url")
+        print(f"[articles] ========================================")
+        print(f"[articles] ABOUT TO UPSERT TO DATABASE")
+        print(f"[articles] ========================================")
+        print(f"[articles] Total articles: {len(collected)}")
+        print(f"[articles] Articles WITH image_url: {articles_with_images}")
+        print(f"[articles] Articles WITHOUT image_url: {len(collected) - articles_with_images}")
+        print(f"[articles] ========================================")
         for i, art in enumerate(collected[:5]):  # Log first 5
             img = art.get("image_url") or ""
-            print(f"[articles] Article {i+1}: '{art.get('title', '')[:40]}' -> image_url: {img[:100] if img else 'NONE/EMPTY'}")
+            print(f"[articles] Article {i+1}: '{art.get('title', '')[:40]}'")
+            print(f"[articles]   → image_url: {img[:100] if img else 'NONE/EMPTY'}")
+            if img and "supabase.co" in img:
+                print(f"[articles]   → ✓ Supabase storage URL detected")
         
         # Use upsert with ignore_duplicates=False to update existing rows
         # This ensures image_url gets updated even if article already exists
+        print(f"[articles] Executing upsert with on_conflict='link', ignore_duplicates=False...")
         response = supabase.table("articles").upsert(
             collected,
             on_conflict="link",
             ignore_duplicates=False,  # Update existing rows instead of ignoring
         ).execute()
         inserted = len(response.data) if getattr(response, "data", None) else len(collected)
-        print(f"[articles] ✓ upserted {inserted} records")
+        print(f"[articles] ========================================")
+        print(f"[articles] ✓✓✓ UPSERT COMPLETE: {inserted} records processed")
+        print(f"[articles] ========================================")
         
         # Verify what was actually saved - query back from database
         if response.data:
