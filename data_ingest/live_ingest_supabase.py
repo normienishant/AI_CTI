@@ -253,16 +253,23 @@ def _get_screenshot_url(article_url: str) -> Optional[str]:
 
 def _extract_image_url(article_url: str) -> Optional[str]:
     """Extract featured/OG image from article - ENHANCED to find actual article images, not full page screenshots"""
+    print(f"[image] ========================================")
+    print(f"[image] EXTRACTING FEATURED IMAGE FROM: {article_url[:80]}")
+    print(f"[image] ========================================")
+    
     try:
-        resp = requests.get(article_url, timeout=15, headers=HEADERS, allow_redirects=True)
+        resp = requests.get(article_url, timeout=20, headers=HEADERS, allow_redirects=True)
         resp.raise_for_status()
+        print(f"[image] ✓ Successfully fetched article HTML ({len(resp.text)} bytes)")
     except Exception as exc:
-        print(f"[image] fetch failed for {article_url}: {exc}")
+        print(f"[image] ✗✗✗ Fetch failed for {article_url}: {exc}")
         return None
 
     soup = BeautifulSoup(resp.text, "lxml")
     
     # Method 1: Try OG/Twitter meta tags (MOST RELIABLE - these are actual featured images)
+    # This is the PRIMARY method - most sites have OG images
+    print(f"[image] Method 1: Checking OG/Twitter meta tags...")
     meta_selectors = [
         ("meta", {"property": "og:image"}),
         ("meta", {"name": "og:image"}),
@@ -272,35 +279,54 @@ def _extract_image_url(article_url: str) -> Optional[str]:
         ("meta", {"name": "twitter:image:src"}),
         ("meta", {"property": "twitter:image:src"}),
         ("link", {"rel": "image_src"}),  # Some sites use this
+        ("link", {"rel": "preload", "as": "image"}),  # Some sites preload featured images
     ]
+    
+    found_meta_images = []
     for tag_name, attrs in meta_selectors:
-        tag = soup.find(tag_name, attrs=attrs)
-        if tag:
-            url = tag.get("content") or tag.get("href")
+        tags = soup.find_all(tag_name, attrs=attrs) if tag_name == "link" else [soup.find(tag_name, attrs=attrs)]
+        for tag in tags:
+            if not tag:
+                continue
+            url = tag.get("content") or tag.get("href") or tag.get("imagesrcset")
             if url:
                 url = url.strip()
+                # Handle srcset (take first URL)
+                if " " in url:
+                    url = url.split()[0]
                 # Skip placeholder/default images
                 url_lower = url.lower()
-                if any(skip in url_lower for skip in ["placeholder", "default", "logo-only", "no-image"]):
+                if any(skip in url_lower for skip in ["placeholder", "default", "logo-only", "no-image", "1x1", "blank"]):
+                    print(f"[image]   ✗ Skipping placeholder: {url[:60]}")
                     continue
                 if url.startswith("//"):
                     parsed = urlparse(article_url)
                     url = f"{parsed.scheme}:{url}"
                 if url.startswith("http") and not url.startswith("http://localhost"):
-                    # Verify it's not a screenshot service URL
-                    if "screenshot" not in url_lower and "microlink" not in url_lower:
-                        print(f"[image] ✓✓✓ Found OG/Twitter meta image: {url[:100]}")
-                        return url
+                    # CRITICAL: Verify it's not a screenshot service URL
+                    if "screenshot" not in url_lower and "microlink" not in url_lower and "shot" not in url_lower:
+                        found_meta_images.append(url)
+                        print(f"[image]   ✓ Found potential OG image: {url[:100]}")
+    
+    # Return the first valid OG image found
+    if found_meta_images:
+        best_image = found_meta_images[0]
+        print(f"[image] ✓✓✓✓✓ SELECTED OG/Twitter meta image: {best_image[:100]}")
+        return best_image
+    else:
+        print(f"[image] ✗ No valid OG/Twitter meta images found")
     
     # Method 2: Try to find article featured image in common HTML patterns
     # Look for article header images, featured images, hero images
+    print(f"[image] Method 2: Checking HTML patterns for featured images...")
     article_selectors = [
-        ("img", {"class": re.compile(r"featured|hero|header|article-image|post-image|thumbnail|entry-image|wp-post-image", re.I)}),
-        ("img", {"id": re.compile(r"featured|hero|header|article-image|post-image|main-image", re.I)}),
+        ("img", {"class": re.compile(r"featured|hero|header|article-image|post-image|thumbnail|entry-image|wp-post-image|attachment-post-thumbnail", re.I)}),
+        ("img", {"id": re.compile(r"featured|hero|header|article-image|post-image|main-image|post-thumbnail", re.I)}),
         ("img", {"data-src": re.compile(r"featured|hero|header|article", re.I)}),
-        ("div", {"class": re.compile(r"featured-image|hero-image|article-image|post-thumbnail|entry-thumbnail|post-featured", re.I)}),
-        ("figure", {"class": re.compile(r"featured|article-image|post-image|wp-block-image", re.I)}),
+        ("div", {"class": re.compile(r"featured-image|hero-image|article-image|post-thumbnail|entry-thumbnail|post-featured|wp-post-image", re.I)}),
+        ("figure", {"class": re.compile(r"featured|article-image|post-image|wp-block-image|wp-caption", re.I)}),
         ("picture", {"class": re.compile(r"featured|hero|article-image", re.I)}),
+        ("section", {"class": re.compile(r"featured-image|hero-image|article-header", re.I)}),
     ]
     
     for selector_type, attrs in article_selectors:
@@ -337,11 +363,17 @@ def _extract_image_url(article_url: str) -> Optional[str]:
                     continue
                 
                 # Verify it's a real image URL (not a placeholder or icon)
-                if any(ext in img_url_lower for ext in [".jpg", ".jpeg", ".png", ".webp", ".gif"]):
-                    print(f"[image] ✓✓✓ Found article featured image (HTML pattern): {img_url[:100]}")
+                # Skip screenshot service URLs
+                if "screenshot" in img_url_lower or "microlink" in img_url_lower or "shot" in img_url_lower:
+                    print(f"[image]   ✗ Skipping screenshot service URL: {img_url[:60]}")
+                    continue
+                
+                if any(ext in img_url_lower for ext in [".jpg", ".jpeg", ".png", ".webp", ".gif"]) or "image" in img_url_lower:
+                    print(f"[image] ✓✓✓✓✓ Found article featured image (HTML pattern): {img_url[:100]}")
                     return img_url
     
     # Method 3: Find first large image in article content (not icons/logos)
+    print(f"[image] Method 3: Checking article content for large images...")
     article_content = soup.find("article") or soup.find("main") or soup.find("div", {"class": re.compile(r"content|post|article|entry-content", re.I)})
     if article_content:
         images = article_content.find_all("img", limit=10)  # Limit to first 10 images
@@ -372,7 +404,8 @@ def _extract_image_url(article_url: str) -> Optional[str]:
                 continue
             
             # Skip screenshot service URLs
-            if "screenshot" in src_lower or "microlink" in src_lower:
+            if "screenshot" in src_lower or "microlink" in src_lower or "shot" in src_lower:
+                print(f"[image]   ✗ Skipping screenshot service URL: {src[:60]}")
                 continue
             
             # Resolve relative URLs
@@ -391,31 +424,37 @@ def _extract_image_url(article_url: str) -> Optional[str]:
                 return src
     
     # Method 4: Try JSON-LD structured data (some sites use this)
+    print(f"[image] Method 4: Checking JSON-LD structured data...")
     try:
         json_ld_scripts = soup.find_all("script", type="application/ld+json")
         for script in json_ld_scripts:
             try:
                 data = json.loads(script.string)
+                # Handle both dict and list of dicts
+                if isinstance(data, list) and len(data) > 0:
+                    data = data[0]
                 if isinstance(data, dict):
                     # Check for image in various JSON-LD formats
-                    image = data.get("image") or data.get("thumbnailUrl")
+                    image = data.get("image") or data.get("thumbnailUrl") or data.get("url")
                     if isinstance(image, dict):
-                        image = image.get("url") or image.get("@id")
+                        image = image.get("url") or image.get("@id") or image.get("contentUrl")
                     if isinstance(image, list) and len(image) > 0:
                         image = image[0]
                         if isinstance(image, dict):
-                            image = image.get("url") or image.get("@id")
+                            image = image.get("url") or image.get("@id") or image.get("contentUrl")
                     if image and isinstance(image, str) and image.startswith("http"):
                         image_lower = image.lower()
-                        if "screenshot" not in image_lower and "microlink" not in image_lower:
-                            print(f"[image] ✓✓✓ Found JSON-LD image: {image[:100]}")
-                            return image
-            except:
+                        if "screenshot" not in image_lower and "microlink" not in image_lower and "shot" not in image_lower:
+                            if any(ext in image_lower for ext in [".jpg", ".jpeg", ".png", ".webp", ".gif"]) or "image" in image_lower:
+                                print(f"[image] ✓✓✓✓✓ Found JSON-LD image: {image[:100]}")
+                                return image
+            except Exception as json_err:
                 continue
-    except:
+    except Exception as json_ld_err:
         pass
     
-    print(f"[image] ✗✗✗ No featured image found for {article_url[:60]}")
+    print(f"[image] ✗✗✗✗✗ NO FEATURED IMAGE FOUND - All methods exhausted for {article_url[:60]}")
+    print(f"[image] Will fall back to screenshot service (full page screenshot)")
     return None
 
 
