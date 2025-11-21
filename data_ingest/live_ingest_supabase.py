@@ -54,12 +54,24 @@ DEFAULT_IMAGE_URL = os.getenv(
     "https://placehold.co/600x360/0f172a/ffffff?text=AI-CTI",
 )
 
+# Rotate user agents to avoid IP bans
+USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15",
+]
+
+import random
 HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/124.0 Safari/537.36"
-    )
+    "User-Agent": random.choice(USER_AGENTS),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.5",
+    "Accept-Encoding": "gzip, deflate, br",
+    "DNT": "1",
+    "Connection": "keep-alive",
+    "Upgrade-Insecure-Requests": "1",
 }
 
 FEEDS: Dict[str, Dict[str, str]] = {
@@ -251,16 +263,114 @@ def _get_screenshot_url(article_url: str) -> Optional[str]:
     return None
 
 
+def _validate_image_url(image_url: str) -> bool:
+    """Validate that an image URL actually returns a valid image (not error page, not white page, not screenshot service)"""
+    if not image_url or not image_url.startswith("http"):
+        return False
+    
+    url_lower = image_url.lower()
+    
+    # Skip screenshot service URLs
+    if any(blocked in url_lower for blocked in ["screenshot", "microlink", "shot", "htmlcsstoimage", "api.screenshot"]):
+        print(f"[image]   ✗ Rejecting screenshot service URL: {image_url[:80]}")
+        return False
+    
+    # Try to validate the image by checking headers
+    try:
+        # Use HEAD request first (faster)
+        headers = {"User-Agent": random.choice(USER_AGENTS)}
+        resp = requests.head(image_url, timeout=8, headers=headers, allow_redirects=True)
+        
+        # Check for Cloudflare errors
+        if resp.status_code == 403 or resp.status_code == 429:
+            print(f"[image]   ✗ Image URL blocked (Cloudflare?): {resp.status_code}")
+            return False
+        
+        # Check content type
+        content_type = resp.headers.get("Content-Type", "").lower()
+        if not any(img_type in content_type for img_type in ["image/", "jpeg", "png", "webp", "gif"]):
+            # If HEAD doesn't give content-type, try GET with limited data
+            if "text/html" in content_type or "application/json" in content_type:
+                print(f"[image]   ✗ URL returns HTML/JSON, not image: {content_type}")
+                return False
+        
+        # Check content length (too small might be error page)
+        content_length = resp.headers.get("Content-Length")
+        if content_length:
+            try:
+                if int(content_length) < 500:  # Less than 500 bytes is suspicious
+                    print(f"[image]   ✗ Image too small ({content_length} bytes), likely error page")
+                    return False
+            except:
+                pass
+        
+        # If HEAD worked, do a small GET to verify it's actually an image
+        if resp.status_code == 200:
+            get_resp = requests.get(image_url, timeout=8, headers=headers, stream=True, allow_redirects=True)
+            # Read only first 1KB to check
+            chunk = next(get_resp.iter_content(1024), b"")
+            if len(chunk) < 100:
+                print(f"[image]   ✗ Image content too small, likely error page")
+                return False
+            
+            # Check if it's HTML (error page)
+            chunk_str = chunk[:200].decode("utf-8", errors="ignore").lower()
+            if any(error_indicator in chunk_str for error_indicator in [
+                "<html", "<!doctype", "error", "cloudflare", "access denied", 
+                "403", "404", "500", "blocked", "banned"
+            ]):
+                print(f"[image]   ✗ URL returns HTML error page, not image")
+                return False
+            
+            # Check image magic bytes
+            if chunk.startswith(b"\xff\xd8\xff") or chunk.startswith(b"\x89PNG") or \
+               chunk.startswith(b"GIF8") or chunk.startswith(b"RIFF") or \
+               chunk.startswith(b"\x00\x00\x01\x00") or chunk.startswith(b"WEBP"):
+                print(f"[image]   ✓ Valid image detected (magic bytes)")
+                return True
+            else:
+                print(f"[image]   ✗ No image magic bytes found")
+                return False
+        
+        return resp.status_code == 200
+        
+    except requests.exceptions.RequestException as e:
+        print(f"[image]   ✗ Could not validate image URL: {e}")
+        return False
+    except Exception as e:
+        print(f"[image]   ✗ Validation error: {e}")
+        return False
+
+
 def _extract_image_url(article_url: str) -> Optional[str]:
     """Extract featured/OG image from article - ENHANCED to find actual article images, not full page screenshots"""
     print(f"[image] ========================================")
     print(f"[image] EXTRACTING FEATURED IMAGE FROM: {article_url[:80]}")
     print(f"[image] ========================================")
     
+    # Rotate user agent for this request
+    headers = HEADERS.copy()
+    headers["User-Agent"] = random.choice(USER_AGENTS)
+    
     try:
-        resp = requests.get(article_url, timeout=20, headers=HEADERS, allow_redirects=True)
+        resp = requests.get(article_url, timeout=20, headers=headers, allow_redirects=True)
+        
+        # Check for Cloudflare blocks
+        if resp.status_code == 403:
+            print(f"[image] ✗✗✗ Cloudflare blocked (403) - IP might be banned")
+            return None
+        if resp.status_code == 429:
+            print(f"[image] ✗✗✗ Rate limited (429) - too many requests")
+            return None
+        
         resp.raise_for_status()
         print(f"[image] ✓ Successfully fetched article HTML ({len(resp.text)} bytes)")
+    except requests.exceptions.HTTPError as e:
+        if e.response and e.response.status_code in [403, 429]:
+            print(f"[image] ✗✗✗ HTTP error {e.response.status_code} - likely blocked")
+        else:
+            print(f"[image] ✗✗✗ HTTP error: {e}")
+        return None
     except Exception as exc:
         print(f"[image] ✗✗✗ Fetch failed for {article_url}: {exc}")
         return None
@@ -308,13 +418,15 @@ def _extract_image_url(article_url: str) -> Optional[str]:
                         found_meta_images.append(url)
                         print(f"[image]   ✓ Found potential OG image: {url[:100]}")
     
-    # Return the first valid OG image found
-    if found_meta_images:
-        best_image = found_meta_images[0]
-        print(f"[image] ✓✓✓✓✓ SELECTED OG/Twitter meta image: {best_image[:100]}")
-        return best_image
-    else:
-        print(f"[image] ✗ No valid OG/Twitter meta images found")
+    # Validate and return the first valid OG image found
+    for img_url in found_meta_images:
+        if _validate_image_url(img_url):
+            print(f"[image] ✓✓✓✓✓ VALIDATED OG/Twitter meta image: {img_url[:100]}")
+            return img_url
+        else:
+            print(f"[image]   ✗ OG image failed validation, trying next...")
+    
+    print(f"[image] ✗ No valid OG/Twitter meta images found (all failed validation)")
     
     # Method 2: Try to find article featured image in common HTML patterns
     # Look for article header images, featured images, hero images
@@ -369,8 +481,12 @@ def _extract_image_url(article_url: str) -> Optional[str]:
                     continue
                 
                 if any(ext in img_url_lower for ext in [".jpg", ".jpeg", ".png", ".webp", ".gif"]) or "image" in img_url_lower:
-                    print(f"[image] ✓✓✓✓✓ Found article featured image (HTML pattern): {img_url[:100]}")
-                    return img_url
+                    if _validate_image_url(img_url):
+                        print(f"[image] ✓✓✓✓✓ VALIDATED article featured image (HTML pattern): {img_url[:100]}")
+                        return img_url
+                    else:
+                        print(f"[image]   ✗ HTML pattern image failed validation, trying next...")
+                        continue
     
     # Method 3: Find first large image in article content (not icons/logos)
     print(f"[image] Method 3: Checking article content for large images...")
@@ -420,8 +536,12 @@ def _extract_image_url(article_url: str) -> Optional[str]:
             
             # Must be a real image file
             if any(ext in src_lower for ext in [".jpg", ".jpeg", ".png", ".webp", ".gif"]):
-                print(f"[image] ✓✓✓ Found article content image: {src[:100]}")
-                return src
+                if _validate_image_url(src):
+                    print(f"[image] ✓✓✓ VALIDATED article content image: {src[:100]}")
+                    return src
+                else:
+                    print(f"[image]   ✗ Content image failed validation, trying next...")
+                    continue
     
     # Method 4: Try JSON-LD structured data (some sites use this)
     print(f"[image] Method 4: Checking JSON-LD structured data...")
@@ -446,8 +566,12 @@ def _extract_image_url(article_url: str) -> Optional[str]:
                         image_lower = image.lower()
                         if "screenshot" not in image_lower and "microlink" not in image_lower and "shot" not in image_lower:
                             if any(ext in image_lower for ext in [".jpg", ".jpeg", ".png", ".webp", ".gif"]) or "image" in image_lower:
-                                print(f"[image] ✓✓✓✓✓ Found JSON-LD image: {image[:100]}")
-                                return image
+                                if _validate_image_url(image):
+                                    print(f"[image] ✓✓✓✓✓ VALIDATED JSON-LD image: {image[:100]}")
+                                    return image
+                                else:
+                                    print(f"[image]   ✗ JSON-LD image failed validation, trying next...")
+                                    continue
             except Exception as json_err:
                 continue
     except Exception as json_ld_err:
@@ -581,29 +705,79 @@ def _upload_image_to_supabase(image_url: str) -> Optional[str]:
             except Exception as verify_err:
                 print(f"[image] ✗ Could not verify existing URL ({verify_err}), will re-upload")
 
-    # Download image with retry
+    # Download image with retry and validation
     content = None
     content_type = "image/jpeg"
+    headers = HEADERS.copy()
+    headers["User-Agent"] = random.choice(USER_AGENTS)
+    
     for attempt in range(2):
         try:
-            resp = requests.get(image_url, timeout=15, headers=HEADERS, stream=True, allow_redirects=True)
+            resp = requests.get(image_url, timeout=15, headers=headers, stream=True, allow_redirects=True)
+            
+            # Check for Cloudflare blocks
+            if resp.status_code == 403:
+                print(f"[image] ✗✗✗ Image URL blocked by Cloudflare (403)")
+                return None
+            if resp.status_code == 429:
+                print(f"[image] ✗✗✗ Image URL rate limited (429)")
+                return None
+            
             resp.raise_for_status()
             content = resp.content
             content_type = resp.headers.get("Content-Type", "image/jpeg").split(";")[0]
-            if len(content) < 100:  # Too small, might be error page
-                print(f"[image] Downloaded content too small ({len(content)} bytes), retrying...")
+            
+            # Validate content size
+            if len(content) < 500:  # Too small, might be error page
+                print(f"[image] ✗ Downloaded content too small ({len(content)} bytes), likely error page")
                 if attempt == 0:
+                    import time
+                    time.sleep(2)
                     continue
+                return None
+            
+            # Check if it's actually an image (not HTML error page)
+            content_preview = content[:500].decode("utf-8", errors="ignore").lower()
+            if any(error_indicator in content_preview for error_indicator in [
+                "<html", "<!doctype", "error", "cloudflare", "access denied", 
+                "403", "404", "500", "blocked", "banned", "error 1008"
+            ]):
+                print(f"[image] ✗✗✗ Downloaded content is HTML error page, not image")
+                return None
+            
+            # Check image magic bytes
+            if not (content.startswith(b"\xff\xd8\xff") or content.startswith(b"\x89PNG") or 
+                    content.startswith(b"GIF8") or content.startswith(b"RIFF") or 
+                    content.startswith(b"\x00\x00\x01\x00") or content.startswith(b"WEBP")):
+                print(f"[image] ✗✗✗ Downloaded content is not a valid image (no magic bytes)")
+                return None
+            
+            # Verify content type
+            if "image/" not in content_type.lower() and not any(ext in image_url.lower() for ext in [".jpg", ".jpeg", ".png", ".webp", ".gif"]):
+                print(f"[image] ✗ Content-Type is not image: {content_type}")
+                return None
+            
+            print(f"[image] ✓ Downloaded valid image: {len(content)} bytes, type: {content_type}")
             break
+            
+        except requests.exceptions.HTTPError as e:
+            if e.response and e.response.status_code in [403, 429]:
+                print(f"[image] ✗✗✗ HTTP error {e.response.status_code} - blocked/rate limited")
+                return None
+            print(f"[image] download failed (attempt {attempt+1}/2) for {image_url}: {e}")
+            if attempt == 1:
+                return None
+            import time
+            time.sleep(2)
         except Exception as exc:
             print(f"[image] download failed (attempt {attempt+1}/2) for {image_url}: {exc}")
             if attempt == 1:
                 return None
             import time
-            time.sleep(1)
+            time.sleep(2)
     
     if not content:
-        print(f"[image] Failed to download image content")
+        print(f"[image] ✗✗✗ Failed to download valid image content")
         return None
 
     extension = mimetypes.guess_extension(content_type) or ".jpg"
@@ -921,41 +1095,20 @@ def fetch_feeds_and_upload(limit_per_feed: int = 12) -> None:
                     import traceback
                     traceback.print_exc()
             
-            # Method 2: Screenshot service as LAST RESORT fallback only
-            # WARNING: Screenshot service takes FULL PAGE screenshots, not just thumbnails
-            # We STRONGLY prefer OG/featured images (Method 1) which are actual article images
-            # Only use screenshot if NO featured image is available at all
-            # This should be rare - most sites have OG images
+            # Method 2: Screenshot service DISABLED - causes full page screenshots and Cloudflare blocks
+            # We now rely ONLY on actual OG/featured images extracted from articles
+            # If no OG image found, we skip thumbnail (frontend will show default placeholder)
+            # This prevents:
+            # 1. Full page screenshots instead of thumbnails
+            # 2. Cloudflare IP bans (Error 1008)
+            # 3. White pages from screenshot service failures
+            # 4. Screenshots of article titles instead of images
+            
+            # SCREENSHOT SERVICE DISABLED - Use default placeholder if no OG image found
             if not uploaded_url:
-                try:
-                    print(f"[article] ========================================")
-                    print(f"[article] ⚠️⚠️⚠️  LAST RESORT: No featured image found, using full page screenshot")
-                    print(f"[article] WARNING: This will capture the ENTIRE webpage, not just the article image")
-                    print(f"[article] This is NOT ideal - we prefer actual article images!")
-                    print(f"[article] ========================================")
-                    # Add small delay to avoid rate limits
-                    import time
-                    time.sleep(0.5)  # 500ms delay between screenshot requests
-                    screenshot_url = _get_screenshot_url(link)
-                    if screenshot_url:
-                        print(f"[article] ✓✓✓ Got screenshot URL from service: {screenshot_url[:100]}")
-                        print(f"[article] Now attempting to upload FULL PAGE screenshot to Supabase...")
-                        uploaded_url = _upload_image_to_supabase(screenshot_url)
-                        if uploaded_url:
-                            print(f"[article] ✓✓✓✓✓ SUCCESS: Uploaded full page screenshot: {uploaded_url[:100]}")
-                            print(f"[article] ⚠️  NOTE: This is a FULL PAGE screenshot, not just the article image")
-                            print(f"[article] Future improvement: Try to extract featured image from screenshot or use better OG extraction")
-                        else:
-                            print(f"[article] ✗✗✗ Screenshot upload to Supabase FAILED!")
-                            print(f"[article] Screenshot URL was: {screenshot_url[:100]}")
-                            print(f"[article] Check upload logs above for errors")
-                    else:
-                        print(f"[article] ✗✗✗ Screenshot service returned no URL - all services failed")
-                        print(f"[article] This article will have NO image_url in database")
-                except Exception as screenshot_err:
-                    print(f"[article] ✗✗✗ Screenshot service error: {screenshot_err}")
-                    import traceback
-                    traceback.print_exc()
+                print(f"[article] ⚠️  No featured image found - will use default placeholder on frontend")
+                print(f"[article] This is better than a full page screenshot!")
+                print(f"[article] Frontend will show default placeholder image instead of broken screenshot")
             
             if uploaded_url:
                 # CRITICAL: Verify the URL works before saving
