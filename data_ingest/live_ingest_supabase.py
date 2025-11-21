@@ -263,7 +263,7 @@ def _get_screenshot_url(article_url: str) -> Optional[str]:
     return None
 
 
-def _validate_image_url(image_url: str) -> bool:
+def _validate_image_url(image_url: str, article_url: str = None) -> bool:
     """Validate that an image URL actually returns a valid image (not error page, not white page, not screenshot service)"""
     if not image_url or not image_url.startswith("http"):
         return False
@@ -274,6 +274,28 @@ def _validate_image_url(image_url: str) -> bool:
     if any(blocked in url_lower for blocked in ["screenshot", "microlink", "shot", "htmlcsstoimage", "api.screenshot"]):
         print(f"[image]   ✗ Rejecting screenshot service URL: {image_url[:80]}")
         return False
+    
+    # Site-specific filtering for SecurityWeek and DarkReading
+    # These sites often provide banner/header OG images instead of article images
+    if article_url:
+        article_url_lower = article_url.lower()
+        if "securityweek.com" in article_url_lower:
+            # SecurityWeek OG images are often banners - skip common banner patterns
+            if any(banner_pattern in url_lower for banner_pattern in [
+                "og-image", "default", "logo", "banner", "header", 
+                "securityweek.com/images", "securityweek.com/assets"
+            ]):
+                print(f"[image]   ✗ Rejecting SecurityWeek banner/header OG image: {image_url[:80]}")
+                return False
+        
+        if "darkreading.com" in article_url_lower:
+            # DarkReading OG images are often banners - skip common banner patterns
+            if any(banner_pattern in url_lower for banner_pattern in [
+                "og-image", "default", "logo", "banner", "header",
+                "darkreading.com/images", "darkreading.com/assets", "social-share"
+            ]):
+                print(f"[image]   ✗ Rejecting DarkReading banner/header OG image: {image_url[:80]}")
+                return False
     
     # Try to validate the image by checking headers
     try:
@@ -345,9 +367,16 @@ def _validate_image_url(image_url: str) -> bool:
                     
                     # Skip if it's a banner (very wide and short)
                     # Typical banners: width > 1000 and aspect_ratio > 4:1 (width/height > 4)
-                    if width > 1000 and aspect_ratio > 4.0:
+                    # Also check for very wide images (aspect ratio > 3.5:1) as they're likely banners
+                    if width > 1000 and aspect_ratio > 3.5:
                         print(f"[image]   ✗ Image appears to be a banner/header ({width}x{height}, ratio: {aspect_ratio:.2f})")
                         return False
+                    
+                    # For SecurityWeek/DarkReading, be even more strict - reject anything wider than 3:1
+                    if article_url and any(site in article_url.lower() for site in ["securityweek.com", "darkreading.com"]):
+                        if aspect_ratio > 3.0:
+                            print(f"[image]   ✗ Image too wide for article image ({width}x{height}, ratio: {aspect_ratio:.2f}) - likely banner")
+                            return False
                     
                     # Skip if it's too small (likely icon/logo)
                     if width < 300 or height < 200:
@@ -413,9 +442,20 @@ def _extract_image_url(article_url: str) -> Optional[str]:
 
     soup = BeautifulSoup(resp.text, "lxml")
     
+    # Special handling for SecurityWeek and DarkReading
+    # These sites often provide banner/header OG images, so we skip OG and look for actual article images
+    article_url_lower = article_url.lower()
+    skip_og_for_sites = ["securityweek.com", "darkreading.com"]
+    should_skip_og = any(site in article_url_lower for site in skip_og_for_sites)
+    
+    if should_skip_og:
+        print(f"[image] ⚠️  Detected {article_url_lower.split('.')[1] if '.' in article_url_lower else 'site'} - skipping OG images (often banners), will look for actual article images")
+    
     # Method 1: Try OG/Twitter meta tags (MOST RELIABLE - these are actual featured images)
     # This is the PRIMARY method - most sites have OG images
-    print(f"[image] Method 1: Checking OG/Twitter meta tags...")
+    # BUT: Skip for SecurityWeek/DarkReading as they provide banner OG images
+    if not should_skip_og:
+        print(f"[image] Method 1: Checking OG/Twitter meta tags...")
     meta_selectors = [
         ("meta", {"property": "og:image"}),
         ("meta", {"name": "og:image"}),
@@ -462,14 +502,18 @@ def _extract_image_url(article_url: str) -> Optional[str]:
                         print(f"[image]   ✓ Found potential OG image: {url[:100]}")
     
     # Validate and return the first valid OG image found
-    for img_url in found_meta_images:
-        if _validate_image_url(img_url):
-            print(f"[image] ✓✓✓✓✓ VALIDATED OG/Twitter meta image: {img_url[:100]}")
-            return img_url
-        else:
-            print(f"[image]   ✗ OG image failed validation, trying next...")
-    
-    print(f"[image] ✗ No valid OG/Twitter meta images found (all failed validation)")
+    # For SecurityWeek and DarkReading, be more strict - skip OG images that look like banners
+    if not should_skip_og:
+        for img_url in found_meta_images:
+            if _validate_image_url(img_url, article_url):
+                print(f"[image] ✓✓✓✓✓ VALIDATED OG/Twitter meta image: {img_url[:100]}")
+                return img_url
+            else:
+                print(f"[image]   ✗ OG image failed validation, trying next...")
+        
+        print(f"[image] ✗ No valid OG/Twitter meta images found (all failed validation)")
+    else:
+        print(f"[image] ⚠️  Skipping OG images for this site (known to provide banners)")
     
     # Method 2: Try to find article featured image in common HTML patterns
     # Look for article featured images, hero images (NOT site headers/banners)
@@ -543,7 +587,7 @@ def _extract_image_url(article_url: str) -> Optional[str]:
                     continue
                 
                 if any(ext in img_url_lower for ext in [".jpg", ".jpeg", ".png", ".webp", ".gif"]) or "image" in img_url_lower:
-                    if _validate_image_url(img_url):
+                    if _validate_image_url(img_url, article_url):
                         print(f"[image] ✓✓✓✓✓ VALIDATED article featured image (HTML pattern): {img_url[:100]}")
                         return img_url
                     else:
@@ -623,7 +667,7 @@ def _extract_image_url(article_url: str) -> Optional[str]:
             
             # Must be a real image file
             if any(ext in src_lower for ext in [".jpg", ".jpeg", ".png", ".webp", ".gif"]):
-                if _validate_image_url(src):
+                if _validate_image_url(src, article_url):
                     print(f"[image] ✓✓✓ VALIDATED article content image: {src[:100]}")
                     return src
                 else:
@@ -653,7 +697,7 @@ def _extract_image_url(article_url: str) -> Optional[str]:
                         image_lower = image.lower()
                         if "screenshot" not in image_lower and "microlink" not in image_lower and "shot" not in image_lower:
                             if any(ext in image_lower for ext in [".jpg", ".jpeg", ".png", ".webp", ".gif"]) or "image" in image_lower:
-                                if _validate_image_url(image):
+                                if _validate_image_url(image, article_url):
                                     print(f"[image] ✓✓✓✓✓ VALIDATED JSON-LD image: {image[:100]}")
                                     return image
                                 else:
