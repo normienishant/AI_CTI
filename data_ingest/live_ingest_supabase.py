@@ -326,8 +326,44 @@ def _validate_image_url(image_url: str) -> bool:
             if chunk.startswith(b"\xff\xd8\xff") or chunk.startswith(b"\x89PNG") or \
                chunk.startswith(b"GIF8") or chunk.startswith(b"RIFF") or \
                chunk.startswith(b"\x00\x00\x01\x00") or chunk.startswith(b"WEBP"):
-                print(f"[image]   ✓ Valid image detected (magic bytes)")
-                return True
+                # Try to get image dimensions to check if it's a banner/header
+                # Banners are usually very wide and short (e.g., 1200x200)
+                # Article images are usually more square or portrait (e.g., 800x600, 1200x800)
+                try:
+                    from PIL import Image
+                    import io
+                    # Read more data to get full image
+                    full_content = b""
+                    for chunk_data in get_resp.iter_content(8192):
+                        full_content += chunk_data
+                        if len(full_content) > 50000:  # Read up to 50KB for dimension check
+                            break
+                    
+                    img = Image.open(io.BytesIO(full_content))
+                    width, height = img.size
+                    aspect_ratio = width / height if height > 0 else 0
+                    
+                    # Skip if it's a banner (very wide and short)
+                    # Typical banners: width > 1000 and aspect_ratio > 4:1 (width/height > 4)
+                    if width > 1000 and aspect_ratio > 4.0:
+                        print(f"[image]   ✗ Image appears to be a banner/header ({width}x{height}, ratio: {aspect_ratio:.2f})")
+                        return False
+                    
+                    # Skip if it's too small (likely icon/logo)
+                    if width < 300 or height < 200:
+                        print(f"[image]   ✗ Image too small ({width}x{height}), likely icon/logo")
+                        return False
+                    
+                    print(f"[image]   ✓ Valid article image detected ({width}x{height}, ratio: {aspect_ratio:.2f})")
+                    return True
+                except ImportError:
+                    # PIL not available, skip dimension check
+                    print(f"[image]   ✓ Valid image detected (magic bytes, PIL not available for dimension check)")
+                    return True
+                except Exception as dim_err:
+                    # Dimension check failed, but image is valid
+                    print(f"[image]   ✓ Valid image detected (magic bytes, dimension check failed: {dim_err})")
+                    return True
             else:
                 print(f"[image]   ✗ No image magic bytes found")
                 return False
@@ -404,11 +440,18 @@ def _extract_image_url(article_url: str) -> Optional[str]:
                 # Handle srcset (take first URL)
                 if " " in url:
                     url = url.split()[0]
-                # Skip placeholder/default images
+                # Skip placeholder/default images AND banners/headers/logos
                 url_lower = url.lower()
-                if any(skip in url_lower for skip in ["placeholder", "default", "logo-only", "no-image", "1x1", "blank"]):
-                    print(f"[image]   ✗ Skipping placeholder: {url[:60]}")
+                # Skip placeholder/default images AND banners/headers/logos
+                url_lower = url.lower()
+                if any(skip in url_lower for skip in [
+                    "placeholder", "default", "logo-only", "no-image", "1x1", "blank",
+                    "banner", "header", "nav", "navigation", "topbar", "top-bar", 
+                    "site-logo", "site-logo", "brand", "logo", "favicon"
+                ]):
+                    print(f"[image]   ✗ Skipping placeholder/banner/logo: {url[:60]}")
                     continue
+                
                 if url.startswith("//"):
                     parsed = urlparse(article_url)
                     url = f"{parsed.scheme}:{url}"
@@ -429,16 +472,18 @@ def _extract_image_url(article_url: str) -> Optional[str]:
     print(f"[image] ✗ No valid OG/Twitter meta images found (all failed validation)")
     
     # Method 2: Try to find article featured image in common HTML patterns
-    # Look for article header images, featured images, hero images
+    # Look for article featured images, hero images (NOT site headers/banners)
     print(f"[image] Method 2: Checking HTML patterns for featured images...")
     article_selectors = [
-        ("img", {"class": re.compile(r"featured|hero|header|article-image|post-image|thumbnail|entry-image|wp-post-image|attachment-post-thumbnail", re.I)}),
-        ("img", {"id": re.compile(r"featured|hero|header|article-image|post-image|main-image|post-thumbnail", re.I)}),
-        ("img", {"data-src": re.compile(r"featured|hero|header|article", re.I)}),
+        # REMOVED "header" - it matches site headers, not article images
+        ("img", {"class": re.compile(r"featured|hero|article-image|post-image|thumbnail|entry-image|wp-post-image|attachment-post-thumbnail|post-thumbnail", re.I)}),
+        ("img", {"id": re.compile(r"featured|hero|article-image|post-image|main-image|post-thumbnail|entry-image", re.I)}),
+        ("img", {"data-src": re.compile(r"featured|hero|article", re.I)}),
         ("div", {"class": re.compile(r"featured-image|hero-image|article-image|post-thumbnail|entry-thumbnail|post-featured|wp-post-image", re.I)}),
         ("figure", {"class": re.compile(r"featured|article-image|post-image|wp-block-image|wp-caption", re.I)}),
         ("picture", {"class": re.compile(r"featured|hero|article-image", re.I)}),
-        ("section", {"class": re.compile(r"featured-image|hero-image|article-header", re.I)}),
+        # REMOVED "article-header" - might match site headers
+        ("section", {"class": re.compile(r"featured-image|hero-image", re.I)}),
     ]
     
     for selector_type, attrs in article_selectors:
@@ -455,10 +500,27 @@ def _extract_image_url(article_url: str) -> Optional[str]:
                     continue
             
             if img_url:
-                # Skip placeholder/default images
+                # Skip placeholder/default images AND banners/headers/logos
                 img_url_lower = img_url.lower()
-                if any(skip in img_url_lower for skip in ["placeholder", "default", "logo-only", "no-image", "1x1", "spacer"]):
+                if any(skip in img_url_lower for skip in [
+                    "placeholder", "default", "logo-only", "no-image", "1x1", "spacer",
+                    "banner", "header", "nav", "navigation", "topbar", "top-bar",
+                    "site-logo", "brand", "logo", "favicon", "menu", "navbar"
+                ]):
+                    print(f"[image]   ✗ Skipping banner/header/logo: {img_url[:60]}")
                     continue
+                
+                # Check if image is inside a header/nav/banner element (skip those)
+                parent = elem.parent if selector_type == "img" else elem
+                if parent:
+                    parent_classes = " ".join(parent.get("class", [])).lower()
+                    parent_id = (parent.get("id") or "").lower()
+                    if any(skip in parent_classes or skip in parent_id for skip in [
+                        "header", "banner", "nav", "navigation", "topbar", "top-bar",
+                        "site-header", "main-header", "page-header", "navbar"
+                    ]):
+                        print(f"[image]   ✗ Image is inside header/banner element, skipping")
+                        continue
                 
                 # Resolve relative URLs
                 if img_url.startswith("//"):
@@ -500,9 +562,30 @@ def _extract_image_url(article_url: str) -> Optional[str]:
             
             src_lower = src.lower()
             
-            # Skip placeholder/default images
-            if any(skip in src_lower for skip in ["placeholder", "default", "logo-only", "no-image", "1x1", "spacer", "blank"]):
+            # Skip placeholder/default images AND banners/headers/logos
+            if any(skip in src_lower for skip in [
+                "placeholder", "default", "logo-only", "no-image", "1x1", "spacer", "blank",
+                "banner", "header", "nav", "navigation", "topbar", "top-bar",
+                "site-logo", "brand", "logo", "favicon", "menu", "navbar"
+            ]):
                 continue
+            
+            # Check if image is inside a header/nav/banner element (skip those)
+            parent = img.parent
+            while parent and parent.name not in ["article", "main", "body"]:
+                parent_classes = " ".join(parent.get("class", [])).lower()
+                parent_id = (parent.get("id") or "").lower()
+                if any(skip in parent_classes or skip in parent_id for skip in [
+                    "header", "banner", "nav", "navigation", "topbar", "top-bar",
+                    "site-header", "main-header", "page-header", "navbar", "menu"
+                ]):
+                    print(f"[image]   ✗ Image is inside header/banner element, skipping")
+                    break
+                parent = parent.parent
+            else:
+                # If we broke out of the loop, skip this image
+                if parent and parent.name not in ["article", "main", "body"]:
+                    continue
             
             # Skip small images (likely icons/logos)
             width = img.get("width")
@@ -515,8 +598,12 @@ def _extract_image_url(article_url: str) -> Optional[str]:
                 except:
                     pass
             
-            # Skip common icon/logo patterns
-            if any(skip in src_lower for skip in ["logo", "icon", "avatar", "button", "badge", "spinner", "social", "share", "facebook", "twitter", "linkedin"]):
+            # Skip common icon/logo/banner patterns
+            if any(skip in src_lower for skip in [
+                "logo", "icon", "avatar", "button", "badge", "spinner", "social", "share", 
+                "facebook", "twitter", "linkedin", "banner", "header", "nav", "navigation",
+                "topbar", "top-bar", "site-logo", "brand", "favicon", "menu", "navbar"
+            ]):
                 continue
             
             # Skip screenshot service URLs
@@ -637,7 +724,7 @@ def _get_public_url(client, key: str) -> Optional[str]:
         try:
             result = client.get_public_url(clean_key)
             print(f"[image] get_public_url API returned: {type(result)}")
-            if isinstance(result, dict):
+        if isinstance(result, dict):
                 url = result.get("publicUrl") or result.get("publicURL") or result.get("public_url")
                 if url and url.startswith("http"):
                     print(f"[image] Got public URL from API (dict): {url[:80]}")
@@ -655,7 +742,7 @@ def _get_public_url(client, key: str) -> Optional[str]:
                 try:
                     test_resp = requests.head(result, timeout=8, allow_redirects=True)
                     if test_resp.status_code == 200:
-                        return result
+        return result
                 except:
                     pass
         except Exception as api_exc:
@@ -683,13 +770,13 @@ def _upload_image_to_supabase(image_url: str) -> Optional[str]:
     for ext in common_extensions:
         key_with_ext = f"{file_hash}{ext}"
         existing_url = _get_public_url(image_storage, key_with_ext)
-        if existing_url:
+    if existing_url:
             # CRITICAL: Verify the URL actually works by checking if it's accessible
             try:
                 test_resp = requests.head(existing_url, timeout=5, allow_redirects=True)
                 if test_resp.status_code == 200:
                     print(f"[image] ✓ Verified existing thumbnail works: {existing_url}")
-                    return existing_url
+        return existing_url
                 else:
                     print(f"[image] ✗ Existing URL returned {test_resp.status_code}, URL: {existing_url[:100]}")
                     # Try clean URL without any subdirectories
@@ -723,8 +810,8 @@ def _upload_image_to_supabase(image_url: str) -> Optional[str]:
                 print(f"[image] ✗✗✗ Image URL rate limited (429)")
                 return None
             
-            resp.raise_for_status()
-            content = resp.content
+        resp.raise_for_status()
+        content = resp.content
             content_type = resp.headers.get("Content-Type", "image/jpeg").split(";")[0]
             
             # Validate content size
@@ -769,7 +856,7 @@ def _upload_image_to_supabase(image_url: str) -> Optional[str]:
                 return None
             import time
             time.sleep(2)
-        except Exception as exc:
+    except Exception as exc:
             print(f"[image] download failed (attempt {attempt+1}/2) for {image_url}: {exc}")
             if attempt == 1:
                 return None
@@ -1074,7 +1161,7 @@ def fetch_feeds_and_upload(limit_per_feed: int = 12) -> None:
                     print(f"[article] STEP 1: Extracting featured/OG image from article...")
                     print(f"[article] (This gets the actual article image, NOT a full page screenshot)")
                     print(f"[article] ========================================")
-                    og_image = _extract_image_url(link)
+            og_image = _extract_image_url(link)
                     if og_image:
                         print(f"[article] ✓✓✓ Extracted featured/OG image: {og_image[:100]}")
                         # Verify it's not a screenshot service URL
@@ -1265,7 +1352,7 @@ if __name__ == "__main__":
         print("[SCRIPT] Starting fetch_feeds_and_upload()...")
         sys.stdout.flush()
         
-        fetch_feeds_and_upload()
+    fetch_feeds_and_upload()
         
         print("[SCRIPT] ========================================")
         print("[SCRIPT] live_ingest_supabase.py COMPLETED SUCCESSFULLY")
